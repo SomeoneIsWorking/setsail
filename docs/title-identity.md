@@ -34,9 +34,26 @@ Facts about how this title behaves at runtime, each with how it was measured.
 |---|---|---|
 | Presentation cadence | `GX2SetSwapInterval(2)` — the title flips on every second vsync, so it presents at 30 Hz on a 60 Hz cadence with every second flip repeating the previous image | Driven offscreen run of the baseline emulator against the player's disc image with GX2 logging enabled; exactly one matching line across the full 791,368-line log, on 2026-09-19 |
 
+| Uniform submission | Uses **both** Latte uniform paths, heavily: `GX2SetVertexUniformReg` 70,752 calls (the most frequent GX2 call in the run) and `GX2SetVertexUniformBlock` 20,529 | Same run; counts over the full log |
+| Draw submission | `GX2DrawIndexedEx` 33,565 calls | Same run |
+
 This is the fact that makes interpolation fit the existing timing rather than adding
 presents; the mechanism consequence is worked out in wiiuport's
 `docs/issues/ISSUE-003-wwhd-swap-interval.md`.
+
+The uniform counts settle a design question by measurement rather than by argument.
+Wind Waker HD does not pick one uniform path: it sets uniform *registers* more than any
+other GX2 call and also uses uniform *blocks* tens of thousands of times. A substitution
+that handled only the register path — which is what patching `IT_SET_ALU_CONST` bytes in
+the display list would have given — would have missed a large part of the title's
+submitted state. Substituting where the runtime assembles both into one buffer is
+therefore required here, not merely tidier.
+
+**What this run cannot tell us.** It averaged 2.11 swaps per second (237 swaps over
+112 s, median gap 538 ms). That is the software rasteriser crawling, not the title's
+behaviour — see wiiuport's `ISSUE-004`. Nothing about frame timing, pacing, or
+performance may be taken from it. The counts above survive because they are things the
+*guest* did, which the host renderer's speed does not change.
 
 **Not yet established:** that the title's simulation advances exactly once per flip. The
 swap interval says how often it presents, not how often it steps. A blend phase of 0.5
