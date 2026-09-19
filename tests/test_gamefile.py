@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from setsail.gamefile import ENV_GAME_PATH, GameFileUnavailable, from_environment
 
 
