@@ -34,10 +34,33 @@ jobs:
       - name: Run every gate
         run: uv run --frozen --group dev python tools/verify.py
 
-      # The launcher must refuse cleanly when no disc image is configured,
-      # which is exactly the state CI is in. Asserting the refusal here keeps
-      # the no-game path a tested path rather than an untested one players
-      # meet first.
+      # Both of the launcher's refusals are paths a person meets before
+      # anything works, so neither is left untested.
+      #
+      # With no sibling checkout the runtime resolver must refuse first, and
+      # must name where it looked.
+      - name: The launcher refuses without the runtime checkout
+        run: |
+          set +e
+          output=$(uv run --frozen python bootstrap.py 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          test "$code" -eq 2 || { echo "expected exit 2, got $code"; exit 1; }
+          echo "$output" | grep -q "wiiuport runtime checkout was not found"             || { echo "the runtime refusal lost its explanation"; exit 1; }
+          echo "$output" | grep -q "Tried 2 location"             || { echo "the refusal stopped naming where it looked"; exit 1; }
+
+      # The resolver only needs the checkout's marker files, not its
+      # submodules, so this stays cheap and still exercises the real path.
+      - name: Check out the runtime beside this project
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: SomeoneIsWorking/wiiuport
+          path: ../wiiuport
+          submodules: false
+
+      # With the runtime resolvable and no disc image configured, the
+      # player-facing refusal must fire and must still explain itself.
       - name: The launcher refuses without a disc image
         run: |
           set +e
@@ -46,4 +69,4 @@ jobs:
           set -e
           echo "$output"
           test "$code" -eq 2 || { echo "expected exit 2, got $code"; exit 1; }
-          echo "$output" | grep -q "ST-SETUP" || { echo "refusal lost its explanation"; exit 1; }
+          echo "$output" | grep -q "ST-SETUP"             || { echo "the disc-image refusal lost its explanation"; exit 1; }
