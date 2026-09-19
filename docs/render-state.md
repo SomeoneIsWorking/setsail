@@ -37,6 +37,34 @@ The matrix-shaped slots, by volume:
 | 12 | 12 | 2,536 | 3 |
 | 16 | 12 | 1,104 | 2 |
 
+## Uniform-block inventory
+
+`GX2SetVertexUniformBlock(location, sizeInBytes, sourcePointer)`, all 20,529 calls from
+the same run. The title binds blocks at **only four locations**:
+
+| location | size | calls | distinct source buffers | floats |
+|---|---|---|---|---|
+| 4 | 768 B | 12,510 | 58 | 192 |
+| 2 | 512 B | 2,424 | 26 | 128 |
+| 3 | 672 B | 2,121 | 2 | 168 |
+| 1 | 64 B | 1,221 | 16 | 16 |
+| 1 | 256 B | 1,050 | 14 | 64 |
+| 4 | 1024 B | 1,050 | 14 | 256 |
+| 1 | 768 B | 153 | 2 | 192 |
+
+Two readings worth testing:
+
+- **Location 3, 672 bytes, 2 distinct buffers** repeats the `offset=28` signature: heavy
+  traffic out of a tiny fixed set of engine-owned buffers. 168 floats is exactly 14 3x4
+  matrices, though it is equally divisible other ways, and a per-frame constant block of
+  lighting and fog would look the same from here.
+- **Location 4, 768 bytes, 58 distinct buffers** is the opposite signature and the
+  natural place to look for **actor** transforms (ST-ACTORS). 192 floats is 16 3x4
+  matrices, the shape of a skinning palette, which would make each bound buffer one
+  animated character.
+
+Neither is established. Both are shapes.
+
 ## Candidates, and the reasoning
 
 **`offset=28` (4x4) paired with `offset=12` (3x4)** is the strongest lead. The two have
