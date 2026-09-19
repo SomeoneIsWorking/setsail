@@ -34,7 +34,8 @@ class RuntimeCheckout:
 
     @property
     def emulator_binary(self) -> Path:
-        return self.root / "build" / "cemu" / "bin" / "Cemu_relwithdebinfo"
+        """Upstream Cemu places the executable beside its runtime data root."""
+        return self.root / "external" / "cemu" / "bin" / "Cemu_relwithdebinfo"
 
 
 def _is_wiiuport(path: Path) -> bool:
