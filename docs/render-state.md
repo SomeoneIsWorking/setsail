@@ -149,14 +149,31 @@ Nearest neighbour is not the answer either. It is a heuristic that silently swap
 whenever two actors pass close, and a swapped identity produces a blend that interpolates
 between two different objects — visible as an object jumping across the scene.
 
-### What identity actually needs
+### The guest address identifies an object, but only every other frame
 
-The engine's own storage, not an inference from values. The call-shape inventory already
-counted 58 distinct source buffers at uniform-block location 4, so the guest address that
-backs each draw's uniform data is the natural key. **The capture does not record it** --
-each record carries the assembled buffer contents and the shader's layout, but not where
-the data came from. Adding that address to the record is the next step, and until it
-exists no actor identity claim should be made from this data.
+The capture now records the guest physical address of every uniform block a draw
+sourced, taken from `LatteGPUState.contextRegister` where the engine's own loader reads
+it. That address was expected to be the identity. It is, with a structure that has to be
+respected:
+
+**The title double-buffers its uniform storage.** Of 153 distinct address keys in one
+shader across 8 captured frames, 120 appear in exactly four, and their frame sets are
+exactly `[0, 2, 4, 6]`. Every one of the 153 appears at a single frame parity; across all
+shaders, 1,700 of 1,738 multi-frame keys do. An object writes into one buffer on even
+frames and another on odd.
+
+So an address links frame *N* to *N+2*, not to *N+1* — and *N+1* is the interval an
+interpolated frame sits in. Taken naively the address looks like a failed identity: no
+key at all persists across every captured frame.
+
+The identity of an object is therefore **the pair of addresses it alternates between**.
+Establishing that pairing needs one cross-parity match, but unlike per-frame nearest
+neighbour it is learned once and then checkable: a wrong pairing keeps producing a
+discontinuity at every frame, which is detectable, where a per-frame heuristic fails
+silently and only on the frames where two actors pass close.
+
+The 38 keys that are not single-parity are not explained yet and are recorded so they are
+not mistaken for noise later.
 
 ## Limits of what has been measured
 
