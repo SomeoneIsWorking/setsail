@@ -16,8 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "tools"))
 
-from setsail.gamefile import GameFileUnavailable, from_environment  # noqa: E402
-from setsail.runtime import RuntimeNotFound, resolve  # noqa: E402
+from setsail.gamefile import GameFileUnavailable, from_environment
+from setsail.runtime import RuntimeNotFound, resolve
 
 
 def main(argv: list[str]) -> int:
