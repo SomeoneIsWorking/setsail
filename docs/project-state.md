@@ -19,7 +19,7 @@ below states its difference from that baseline.
 |---|---|---|---|
 | ST-BOOT | Title boots to in-game control through our source-built runtime | missing | Blocked on `wiiuport` ST-BUILD. Same behaviour as baseline once it lands; it is the precondition for everything below. |
 | ST-IDENT | Title identity is validated from the player's file before it is accepted | missing | The exact revision and its identity check are not yet recovered from the player's WUX. |
-| ST-CAMERA | Camera transform recovered from the guest's submitted render state | missing | Not started; needs a running game. This is the first true delta from baseline. |
+| ST-CAMERA | Camera transform recovered from the guest's submitted render state | partial | Slot inventory and candidates in `docs/render-state.md`: `offset=28` (4x4) paired with `offset=12` (3x4), written together from 3 source buffers. Gap: no values captured yet, so nothing is identified. Needs a driven run that holds the camera still and then moves only the camera. |
 | ST-ACTORS | Actor/object transforms recovered, with identity stable across ticks | missing | Depends on ST-CAMERA. Unmatched objects must be counted and presented un-blended. |
 | ST-60 | Presents at 60 Hz with interpolated frames from blended transforms | missing | Depends on `wiiuport` ST-REPLAY and ST-NULLDIFF, plus ST-CAMERA and ST-ACTORS. The headline delta from baseline. |
 | ST-60-EVIDENCE | Interpolation proven by counters with denominators and code-diffed captures | missing | A run where interpolation never fired must fail, not pass quietly. |
