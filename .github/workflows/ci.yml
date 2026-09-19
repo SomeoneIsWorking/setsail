@@ -1,0 +1,49 @@
+# Linux is the only claimed host; this project ships a Linux product.
+#
+# There is deliberately no job that builds and runs the game here. Doing so
+# needs the sibling wiiuport checkout, a full runtime build, and the player's
+# own disc image -- and game files never enter CI. Title conformance is local
+# evidence by design; see docs/project-state.md.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: gates (ruff, pytest, launcher shim, structure)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+
+      - name: Run every gate
+        run: uv run --frozen --group dev python tools/verify.py
+
+      # The launcher must refuse cleanly when no disc image is configured,
+      # which is exactly the state CI is in. Asserting the refusal here keeps
+      # the no-game path a tested path rather than an untested one players
+      # meet first.
+      - name: The launcher refuses without a disc image
+        run: |
+          set +e
+          output=$(uv run --frozen python bootstrap.py 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          test "$code" -eq 2 || { echo "expected exit 2, got $code"; exit 1; }
+          echo "$output" | grep -q "ST-SETUP" || { echo "refusal lost its explanation"; exit 1; }
