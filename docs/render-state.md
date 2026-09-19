@@ -117,6 +117,47 @@ The earlier reading of that inventory — a 3x4 at `offset=12` paired with a 4x4
 hypothesis about a layout and is not what the values show. Equal call counts did not
 mean what it assumed.
 
+## Actors: what they look like, and why identity is still open
+
+A capture at frame 900 (1,619 draws a frame, against 25 at frame 3000) holds moving
+actor transforms. The same 3x4 shape, but differing between draws of one frame rather
+than shared across the frame: in shader `b7252004aba21c10` at float offset 4, 31 distinct
+orthonormal matrices across 93 draws, changing at every one of 7 frame boundaries.
+
+The scene at frame 300 has none. Its five per-draw transforms are byte-identical across
+all four frames — static scenery. A capture can therefore contain a perfectly good camera
+and no actor motion at all, which is why actor work needs its own scene and cannot be
+read off whichever capture proved the camera.
+
+### Draw order is not an actor identity
+
+The cheapest hypothesis is that the *n*th draw of a frame is the same object as the *n*th
+draw of the next. It is wrong, and measurably so:
+
+| pairing between consecutive frames | median | mean |
+|---|---|---|
+| same draw index | 0.00 | 296.00 |
+| nearest neighbour in translation | 0.00 | **10.39** |
+| random | 391.60 | 1152.99 |
+
+Order-matching is 28x worse than nearest neighbour. The reason is visible in the draw
+counts themselves, which fall 93, 87, 87, 81, 72, 72, 69, 69 across the eight captured
+frames: objects enter and leave, so every index after a removal refers to something else.
+Order-matching still beats random, which is exactly how this would pass a careless check.
+
+Nearest neighbour is not the answer either. It is a heuristic that silently swaps identity
+whenever two actors pass close, and a swapped identity produces a blend that interpolates
+between two different objects — visible as an object jumping across the scene.
+
+### What identity actually needs
+
+The engine's own storage, not an inference from values. The call-shape inventory already
+counted 58 distinct source buffers at uniform-block location 4, so the guest address that
+backs each draw's uniform data is the natural key. **The capture does not record it** --
+each record carries the assembled buffer contents and the shader's layout, but not where
+the data came from. Adding that address to the record is the next step, and until it
+exists no actor identity claim should be made from this data.
+
 ## Limits of what has been measured
 
 **The camera finding rests on four consecutive frames** captured at frame 300 of an
