@@ -51,13 +51,19 @@ therefore required here, not merely tidier.
 
 **What this run cannot tell us.** It averaged 2.11 swaps per second (237 swaps over
 112 s, median gap 538 ms). That is the software rasteriser crawling, not the title's
-behaviour — see wiiuport's `ISSUE-004`. Nothing about frame timing, pacing, or
-performance may be taken from it. The counts above survive because they are things the
+behaviour: offscreen runs then used Xvfb, which has no DRI3, so Vulkan fell back to
+llvmpipe. Nothing about frame timing, pacing, or performance may be taken from it. The
+harness now renders on the real GPU under gamescope's headless backend, where the title
+measures 30.10 Hz while walking in the field. The counts above survive because they are things the
 *guest* did, which the host renderer's speed does not change.
 
 **Not yet established:** that the title's simulation advances exactly once per flip. The
 swap interval says how often it presents, not how often it steps. A blend phase of 0.5
-is unjustified until that is measured, and `ST-60` must not assume it.
+is unjustified until that is measured, and `ST-60` must not assume it. The camera is
+evidence for one step per flip without proving it: over 16 consecutive recorded frames
+of swimming, its recovered position moved 3.24 to 3.83 units every frame, and never
+repeated a frame, which is what a simulation stepped once per flip produces and not what
+one stepped every other flip would.
 
 **A second copy of this title is not a second target.** A different region, revision, or
 an installed update is a different conformance target and needs its own recovered
