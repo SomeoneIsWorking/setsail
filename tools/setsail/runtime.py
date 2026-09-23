@@ -33,9 +33,18 @@ class RuntimeCheckout:
         return self.root / "tools" / "build_runtime.py"
 
     @property
-    def emulator_binary(self) -> Path:
-        """Upstream Cemu places the executable beside its runtime data root."""
-        return self.root / "external" / "cemu" / "bin" / "Cemu_relwithdebinfo"
+    def product_binary(self) -> Path:
+        """The runtime's own executable, beside the data root it reads at startup."""
+        return self.root / "external" / "cemu" / "bin" / "wiiuport"
+
+    def launch_command(self, game: Path | None, extra: list[str]) -> list[str]:
+        """How the product is started: the title is its one positional argument,
+        and with none it opens the remembered title or asks the player for one.
+        It refuses options it does not know, so none is invented here."""
+        command = [str(self.product_binary)]
+        if game is not None:
+            command.append(str(game))
+        return [*command, *extra]
 
 
 def _is_wiiuport(path: Path) -> bool:

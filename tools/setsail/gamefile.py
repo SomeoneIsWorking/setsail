@@ -1,9 +1,9 @@
 """Where the player's own Wind Waker HD disc image comes from.
 
 The disc image is the player's. This project ships none of it and records no
-path to it. Until the first-run setup screen exists (state item ST-SETUP), the
-only source is a maintainer override, and its absence is an explicit refusal
-that says so rather than a silent failure to launch.
+path to it. The player chooses it in the runtime's own first-run setup screen,
+which remembers the choice; the override here is for maintainers only, and
+when it is unset the runtime asks.
 """
 
 from __future__ import annotations
@@ -41,19 +41,13 @@ class GameFile:
         return False
 
 
-def from_environment(environ: dict[str, str] | None = None) -> GameFile:
-    """Resolve the maintainer override, refusing with the exact reason."""
+def from_environment(environ: dict[str, str] | None = None) -> GameFile | None:
+    """Resolve the maintainer override, refusing with the exact reason; none
+    when it is unset, so the runtime's setup screen asks the player."""
     environ = os.environ if environ is None else environ
     raw = environ.get(ENV_GAME_PATH)
     if not raw:
-        raise GameFileUnavailable(
-            "no Wind Waker HD disc image is configured.\n"
-            "The first-run setup screen that would ask you for one is not built "
-            "yet (see ST-SETUP in docs/project-state.md), so for now a "
-            f"maintainer sets {ENV_GAME_PATH} to the path of their own copy:\n"
-            f"  {ENV_GAME_PATH}=/path/to/your/wind-waker-hd.wux ./run.sh\n"
-            f"Accepted containers: {', '.join(ACCEPTED_SUFFIXES)}"
-        )
+        return None
     path = Path(raw).expanduser()
     if not path.is_file():
         raise GameFileUnavailable(

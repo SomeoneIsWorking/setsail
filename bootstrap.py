@@ -33,7 +33,7 @@ def main(argv: list[str]) -> int:
         print(f"refused: {error}", file=sys.stderr)
         return 2
 
-    if not runtime.emulator_binary.is_file():
+    if not runtime.product_binary.is_file():
         print(f"building the runtime in {runtime.root} (first run takes a while)")
         built = subprocess.run(
             ["uv", "run", "--frozen", "python", str(runtime.build_tool)],
@@ -41,19 +41,19 @@ def main(argv: list[str]) -> int:
         )
         if built.returncode != 0:
             print(
-                f"refused: building the runtime failed. See {runtime.root}/scratch/build/",
+                "refused: building the runtime failed; its output is above.",
                 file=sys.stderr,
             )
             return 1
-    if not runtime.emulator_binary.is_file():
+    if not runtime.product_binary.is_file():
         print(
-            f"refused: the runtime reported success but {runtime.emulator_binary} "
+            f"refused: the runtime reported success but {runtime.product_binary} "
             "does not exist; refusing to launch a stale or absent build",
             file=sys.stderr,
         )
         return 1
 
-    command = [str(runtime.emulator_binary), "--game", str(game.path), *argv]
+    command = runtime.launch_command(None if game is None else game.path, argv)
     return subprocess.run(command, check=False).returncode
 
 
