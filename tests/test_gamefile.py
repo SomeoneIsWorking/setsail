@@ -8,12 +8,8 @@ import pytest
 from setsail.gamefile import ENV_GAME_PATH, GameFileUnavailable, from_environment
 
 
-def test_unset_override_explains_that_setup_is_not_built_yet() -> None:
-    with pytest.raises(GameFileUnavailable) as raised:
-        from_environment(environ={})
-    message = str(raised.value)
-    assert "ST-SETUP" in message
-    assert ENV_GAME_PATH in message
+def test_unset_override_leaves_the_choice_to_the_runtimes_setup_screen() -> None:
+    assert from_environment(environ={}) is None
 
 
 def test_nonexistent_path_is_refused_by_name(tmp_path: Path) -> None:

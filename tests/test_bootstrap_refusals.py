@@ -42,16 +42,14 @@ def _fake_runtime(at: Path) -> Path:
     return at
 
 
-def test_no_disc_image_is_refused_before_anything_is_built(tmp_path: Path) -> None:
-    """The refusal must explain itself, and must not start a runtime build."""
+def test_no_disc_image_goes_on_to_the_runtime_which_asks_for_one(tmp_path: Path) -> None:
+    """With nothing configured the launcher is not the one to refuse: the
+    runtime's setup screen asks the player. Here the fake runtime is unbuilt,
+    so the launcher gets as far as building it."""
     runtime = _fake_runtime(tmp_path / "wiiuport")
     result = _launch({"SETSAIL_WIIUPORT_DIR": str(runtime)})
-    assert result.returncode == 2
-    assert "ST-SETUP" in result.stderr
-    assert "SETSAIL_GAME" in result.stderr
-    assert "building the runtime" not in result.stdout, (
-        "the disc image must be resolved before a build is started"
-    )
+    assert "building the runtime" in result.stdout
+    assert "SETSAIL_GAME" not in result.stderr
 
 
 def test_a_path_with_the_wrong_container_is_refused(tmp_path: Path) -> None:
@@ -74,3 +72,6 @@ def test_a_missing_disc_image_is_refused_by_name(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert "not an existing file" in result.stderr
     assert str(absent) in result.stderr
+    assert "building the runtime" not in result.stdout, (
+        "a bad override must be refused before a build is started"
+    )

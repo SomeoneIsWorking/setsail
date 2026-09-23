@@ -59,9 +59,13 @@ jobs:
           path: ../wiiuport
           submodules: false
 
-      # With the runtime resolvable and no disc image configured, the
-      # player-facing refusal must fire and must still explain itself.
-      - name: The launcher refuses without a disc image
+      # With the runtime resolvable, a maintainer override naming a disc
+      # image that is not there must be refused by name before any build.
+      # With no override the runtime's own setup screen asks the player,
+      # which needs a built runtime and is proven in wiiuport.
+      - name: The launcher refuses a disc image that is not there
+        env:
+          SETSAIL_GAME: /nonexistent/wind-waker-hd.wux
         run: |
           set +e
           output=$(uv run --frozen python bootstrap.py 2>&1)
@@ -69,4 +73,4 @@ jobs:
           set -e
           echo "$output"
           test "$code" -eq 2 || { echo "expected exit 2, got $code"; exit 1; }
-          echo "$output" | grep -q "ST-SETUP"             || { echo "the disc-image refusal lost its explanation"; exit 1; }
+          echo "$output" | grep -q "not an existing file"             || { echo "the disc-image refusal lost its explanation"; exit 1; }
