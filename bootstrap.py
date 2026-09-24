@@ -16,45 +16,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "tools"))
 
-from setsail.gamefile import GameFileUnavailable, from_environment
-from setsail.runtime import RuntimeNotFound, resolve
+from setsail.launch import LaunchRefused, prepare
 
 
 def main(argv: list[str]) -> int:
     try:
-        runtime = resolve(ROOT)
-    except RuntimeNotFound as error:
-        print(f"refused: {error}", file=sys.stderr)
-        return 2
-
-    try:
-        game = from_environment()
-    except GameFileUnavailable as error:
-        print(f"refused: {error}", file=sys.stderr)
-        return 2
-
-    if not runtime.product_binary.is_file():
-        print(f"building the runtime in {runtime.root} (first run takes a while)")
-        built = subprocess.run(
-            ["uv", "run", "--frozen", "python", str(runtime.build_tool)],
-            cwd=runtime.root,
-            check=False,
-        )
-        if built.returncode != 0:
-            print(
-                "refused: building the runtime failed; its output is above.",
-                file=sys.stderr,
-            )
-            return 1
-    if not runtime.product_binary.is_file():
-        print(
-            f"refused: the runtime reported success but {runtime.product_binary} "
-            "does not exist; refusing to launch a stale or absent build",
-            file=sys.stderr,
-        )
-        return 1
-
-    command = runtime.launch_command(None if game is None else game.path, argv)
+        command = prepare(ROOT, argv)
+    except LaunchRefused as refused:
+        print(f"refused: {refused}", file=sys.stderr)
+        return refused.exit_code
     return subprocess.run(command, check=False).returncode
 
 

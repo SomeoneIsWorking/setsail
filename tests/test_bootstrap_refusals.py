@@ -23,13 +23,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def _launch(env_extra: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def _launch(
+    env_extra: dict[str, str], script: str = "bootstrap.py"
+) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
     env.pop("SETSAIL_GAME", None)
     env.pop("SETSAIL_WIIUPORT_DIR", None)
     env.update(env_extra)
     return subprocess.run(
-        [sys.executable, str(ROOT / "bootstrap.py")],
+        [sys.executable, str(ROOT / script)],
         cwd=ROOT,
         env=env,
         capture_output=True,
@@ -52,7 +54,7 @@ def test_no_disc_image_goes_on_to_the_runtime_which_asks_for_one(tmp_path: Path)
     so the launcher gets as far as building it."""
     runtime = _fake_runtime(tmp_path / "wiiuport")
     result = _launch({"SETSAIL_WIIUPORT_DIR": str(runtime)})
-    assert "building the runtime" in result.stdout
+    assert "bringing the runtime" in result.stdout
     assert "SETSAIL_GAME" not in result.stderr
 
 
@@ -72,6 +74,44 @@ def test_a_missing_disc_image_is_refused_by_name(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert "not an existing file" in result.stderr
     assert str(absent) in result.stderr
-    assert "building the runtime" not in result.stdout, (
+    assert "bringing the runtime" not in result.stdout, (
         "a bad override must be refused before a build is started"
     )
+
+
+def test_a_failed_build_never_launches_the_binary_already_there(tmp_path: Path) -> None:
+    runtime = _fake_runtime(tmp_path / "wiiuport")
+    (runtime / "tools" / "build_runtime.py").write_text("raise SystemExit(1)\n")
+    product = runtime / "external" / "cemu" / "bin" / "wiiuport"
+    product.parent.mkdir(parents=True)
+    product.write_text("#!/bin/sh\necho LAUNCHED\n")
+    product.chmod(0o755)
+    result = _launch({"SETSAIL_WIIUPORT_DIR": str(runtime)})
+    assert result.returncode == 1
+    assert "LAUNCHED" not in result.stdout
+    assert "Not launching the build that was there before" in result.stderr
+
+
+def test_an_up_to_date_build_launches_the_product(tmp_path: Path) -> None:
+    runtime = _fake_runtime(tmp_path / "wiiuport")
+    (runtime / "tools" / "build_runtime.py").write_text("raise SystemExit(0)\n")
+    product = runtime / "external" / "cemu" / "bin" / "wiiuport"
+    product.parent.mkdir(parents=True)
+    product.write_text('#!/bin/sh\necho LAUNCHED "$@"\n')
+    product.chmod(0o755)
+    result = _launch({"SETSAIL_WIIUPORT_DIR": str(runtime)})
+    assert result.returncode == 0
+    assert "LAUNCHED --title-id 0005000010143500" in result.stdout
+
+
+def test_provisioning_builds_and_names_the_command_without_launching(tmp_path: Path) -> None:
+    runtime = _fake_runtime(tmp_path / "wiiuport")
+    (runtime / "tools" / "build_runtime.py").write_text("raise SystemExit(0)\n")
+    product = runtime / "external" / "cemu" / "bin" / "wiiuport"
+    product.parent.mkdir(parents=True)
+    product.write_text("#!/bin/sh\necho LAUNCHED\n")
+    product.chmod(0o755)
+    result = _launch({"SETSAIL_WIIUPORT_DIR": str(runtime)}, "tools/provision.py")
+    assert result.returncode == 0
+    assert "LAUNCHED" not in result.stdout
+    assert f"./run.sh would run: {product} --title-id 0005000010143500" in result.stdout
