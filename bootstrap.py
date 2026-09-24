@@ -37,7 +37,8 @@ def main(argv: list[str]) -> int:
         print(f"building the runtime in {runtime.root} (first run takes a while)")
         built = subprocess.run(
             ["uv", "run", "--frozen", "python", str(runtime.build_tool)],
-            cwd=runtime.root, check=False,
+            cwd=runtime.root,
+            check=False,
         )
         if built.returncode != 0:
             print(

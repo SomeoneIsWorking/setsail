@@ -61,24 +61,44 @@ def check_source_sizes(root: Path) -> list[str]:
 def _uv(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["uv", "run", "--frozen", "--group", "dev", *arguments],
-        cwd=root, capture_output=True, text=True, check=False,
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 
 def gate_lint(root: Path) -> GateResult:
     result = _uv(root, "ruff", "check", "tools", "tests", "bootstrap.py")
     return GateResult(
-        "python lint (ruff)", result.returncode == 0,
+        "python lint (ruff)",
+        result.returncode == 0,
         len([s for s in _sources(root) if s.suffix == ".py"]),
         (result.stdout + result.stderr).strip(),
     )
+
+
+def check_format(root: Path, targets: list[Path]) -> GateResult:
+    """`ruff format --check` over `targets`, with the formatter `root` locks."""
+    result = _uv(root, "ruff", "format", "--check", *(str(target) for target in targets))
+    return GateResult(
+        "python format (ruff format --check)",
+        result.returncode == 0,
+        len(targets),
+        (result.stdout + result.stderr).strip(),
+    )
+
+
+def gate_format(root: Path) -> GateResult:
+    return check_format(root, [root / "tools", root / "tests", root / "bootstrap.py"])
 
 
 def gate_tests(root: Path) -> GateResult:
     result = _uv(root, "python", "-m", "pytest", "-q")
     output = (result.stdout + result.stderr).strip()
     return GateResult(
-        "python tests (pytest)", result.returncode == 0,
+        "python tests (pytest)",
+        result.returncode == 0,
         len(sorted((root / "tests").rglob("test_*.py"))),
         output.splitlines()[-1] if output else "(no output)",
     )
@@ -90,15 +110,19 @@ def gate_launcher_is_a_shim(root: Path) -> GateResult:
     if not script.is_file():
         return GateResult("launcher is a shim", False, 0, f"{script} does not exist")
     body = [
-        line.strip() for line in script.read_text().splitlines()
+        line.strip()
+        for line in script.read_text().splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]
     too_long = len(body) > 5
     hands_off = any(line.startswith("exec uv run --frozen python bootstrap.py") for line in body)
     detail = "\n".join(
         ([f"run.sh has {len(body)} non-comment lines; keep it a shim"] if too_long else [])
-        + ([] if hands_off else
-           ["run.sh must hand straight to: exec uv run --frozen python bootstrap.py \"$@\""])
+        + (
+            []
+            if hands_off
+            else ['run.sh must hand straight to: exec uv run --frozen python bootstrap.py "$@"']
+        )
     )
     return GateResult("launcher is a shim", not too_long and hands_off, len(body), detail)
 
@@ -106,12 +130,14 @@ def gate_launcher_is_a_shim(root: Path) -> GateResult:
 def gate_structure(root: Path) -> GateResult:
     findings = check_source_sizes(root)
     return GateResult(
-        "structure (source size limits)", not findings, len(_sources(root)),
+        "structure (source size limits)",
+        not findings,
+        len(_sources(root)),
         "\n".join(findings),
     )
 
 
-GATES = (gate_lint, gate_tests, gate_launcher_is_a_shim, gate_structure)
+GATES = (gate_lint, gate_format, gate_tests, gate_launcher_is_a_shim, gate_structure)
 
 
 def run_all(root: Path) -> list[GateResult]:
