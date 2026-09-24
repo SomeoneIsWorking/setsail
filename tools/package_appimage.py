@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build the player's AppImage: build/appimage/setsail-x86_64.AppImage.
 
-Brings the sibling runtime up to date through the launcher's own owner, lays
-the package out, and refuses to hand over a package that does not start.
+Has the sibling runtime build its release bundle in its container, lays the
+package out around it, and refuses to hand over a package that does not start.
 """
 
 from __future__ import annotations
@@ -20,14 +20,12 @@ from setsail.appimage import (
     APP_NAME,
     PackageRefused,
     check_package,
-    glibc_floor,
-    libraries_to_bundle,
     pack,
-    parse_ldd,
     stage,
     verified_type2_runtime,
 )
-from setsail.launch import LaunchRefused, bring_up_to_date, resolve_runtime
+from setsail.launch import LaunchRefused, resolve_runtime
+from setsail.runtime import RuntimeCheckout
 
 OUTPUT_DIR = ROOT / "build" / "appimage"
 
@@ -37,25 +35,28 @@ def _download(url: str, destination: Path) -> None:
         destination.write_bytes(response.read())
 
 
-def _output_of(command: list[str]) -> str:
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise PackageRefused(f"{command[0]} failed:\n{result.stderr}")
-    return result.stdout
+def build_release_runtime(runtime: RuntimeCheckout) -> None:
+    """The runtime's own release build, in its container; its output is shown."""
+    built = subprocess.run(
+        ["uv", "run", "--frozen", "python", str(runtime.release_tool)],
+        cwd=runtime.root,
+        check=False,
+    )
+    if built.returncode != 0:
+        raise PackageRefused(
+            "the runtime's release build failed; its output is above. "
+            "Not packaging the bundle that was there before."
+        )
 
 
 def main() -> int:
     try:
         runtime = resolve_runtime(ROOT)
-        bring_up_to_date(runtime)
-        libraries = parse_ldd(_output_of(["ldd", str(runtime.product_binary)]))
-        bundled = libraries_to_bundle(libraries)
-        floor = glibc_floor(_output_of(["objdump", "-T", str(runtime.product_binary)]))
+        build_release_runtime(runtime)
         appdir = OUTPUT_DIR / "AppDir"
         if appdir.exists():
             shutil.rmtree(appdir)
-        # The builder's home names the person who built it.
-        stage(appdir, runtime, bundled, (Path.home(),))
+        manifest = stage(appdir, runtime.release_bundle)
         type2 = verified_type2_runtime(OUTPUT_DIR / "runtime-x86_64", _download)
         package = OUTPUT_DIR / f"{APP_NAME}-x86_64.AppImage"
         pack(appdir, type2, package)
@@ -65,11 +66,9 @@ def main() -> int:
         return 2
     size = package.stat().st_size / (1024 * 1024)
     print(f"packaged {package} ({size:.1f} MiB)")
-    print(
-        f"bundled {len(bundled)} of {len(libraries)} libraries: "
-        + ", ".join(library.name for library in bundled)
-    )
-    print(f"needs glibc {floor} or newer on the player's machine")
+    bundled = manifest["bundled"]
+    print(f"bundled {len(bundled)} of {manifest['linked']} libraries: " + ", ".join(bundled))
+    print(f"needs glibc {manifest['glibc_floor']} or newer on the player's machine")
     print(f"started and refused another title: '{refusal}'")
     return 0
 
