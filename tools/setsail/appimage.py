@@ -184,3 +184,46 @@ def check_package(package: Path, run: Runner = _run) -> str:
             f"(exit {result.returncode}, wanted 2 and '{expected}'):\n{output.strip()}"
         )
     return expected
+
+
+NO_VIDEO_DRIVER = "setsail-package-check"
+"""An SDL video driver no host has, so the setup screen cannot open."""
+
+CRASH_REPORT = "Error: signal"
+"""What the runtime's crash handler prints before it turns a signal -- an abort
+included -- into exit code 1, so the code alone cannot tell a crash."""
+
+EXIT_CHECK_SECONDS = 120
+"""Long enough to bring the emulated system up and down; a hang is a failure."""
+
+
+def check_exit(package: Path, home: Path, run: Runner = _run) -> str:
+    """Start the package with nothing remembered and no display, which it must
+    report and leave.
+
+    Unlike the refusal of another title, this brings the whole emulated system
+    up before the setup screen fails to open, so it proves the package also
+    takes the system down again: a runtime that left a thread joinable, or ran
+    static destructors under the system's own detached threads, aborted or hung
+    here instead of exiting 1.
+    """
+    command = [
+        "env",
+        f"XDG_CONFIG_HOME={home / 'config'}",
+        f"XDG_DATA_HOME={home / 'data'}",
+        f"XDG_CACHE_HOME={home / 'cache'}",
+        f"SDL_VIDEO_DRIVER={NO_VIDEO_DRIVER}",
+        "timeout",
+        str(EXIT_CHECK_SECONDS),
+        str(package),
+    ]
+    result = run(command)
+    output = result.stdout + result.stderr
+    expected = "the setup screen would not open"
+    if result.returncode != 1 or expected not in output or CRASH_REPORT in output:
+        raise PackageRefused(
+            f"the package did not report that it could not show its setup screen and exit "
+            f"(exit {result.returncode}, wanted 1, '{expected}' and no crash report; 124 is "
+            f"a hang):\n{output.strip()}"
+        )
+    return expected

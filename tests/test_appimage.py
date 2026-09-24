@@ -73,6 +73,38 @@ def test_a_package_that_does_not_start_as_this_product_is_refused(
         appimage.check_package(Path("pkg"), _answer(returncode, stderr))
 
 
+def test_a_package_that_reports_no_display_and_exits_passes(tmp_path: Path) -> None:
+    seen: list[list[str]] = []
+
+    def run(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
+        seen.append(list(command))
+        return subprocess.CompletedProcess(
+            list(command), 1, "", "[shell:error] the setup screen would not open: no video"
+        )
+
+    appimage.check_exit(Path("pkg"), tmp_path, run)
+    assert f"SDL_VIDEO_DRIVER={appimage.NO_VIDEO_DRIVER}" in seen[0]
+    assert f"XDG_CONFIG_HOME={tmp_path / 'config'}" in seen[0]
+    assert seen[0][-1] == "pkg"
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stderr"),
+    [
+        (134, "the setup screen would not open\nterminate called without an active exception"),
+        (1, "the setup screen would not open\nterminate called\nError: signal 6:\nAborted!"),
+        (124, "the setup screen would not open"),
+        (0, "the setup screen would not open"),
+        (1, "the Vulkan loader would not initialise"),
+    ],
+)
+def test_a_package_that_aborts_hangs_or_fails_otherwise_on_leaving_is_refused(
+    tmp_path: Path, returncode: int, stderr: str
+) -> None:
+    with pytest.raises(PackageRefused):
+        appimage.check_exit(Path("pkg"), tmp_path, _answer(returncode, stderr))
+
+
 def _bundle(root: Path, executable: str = "usr/bin/wiiuport") -> Path:
     (root / "usr" / "bin").mkdir(parents=True)
     (root / "usr" / "lib").mkdir()
