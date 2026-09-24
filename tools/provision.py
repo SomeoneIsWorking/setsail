@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""The player entry point: provision, build, and launch Wind Waker HD.
+"""Provision exactly as `./run.sh` does, and stop short of launching.
 
-``run.sh`` hands control here. Discovery, build policy, and validation live in
-the modules under ``tools/``; this file only composes them and presents the
-result. It never runs tests, lint, or self-checks — verification is a separate
-named tool.
+A maintainer's check of the fresh-clone path: it resolves the runtime
+checkout, builds it, and prints the command the launcher would run, through
+the launcher's own `setsail.launch.prepare`. Nothing opens on the desktop.
 """
 
 from __future__ import annotations
 
-import subprocess
+import shlex
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 from setsail.launch import LaunchRefused, prepare
@@ -25,7 +24,8 @@ def main(argv: list[str]) -> int:
     except LaunchRefused as refused:
         print(f"refused: {refused}", file=sys.stderr)
         return refused.exit_code
-    return subprocess.run(command, check=False).returncode
+    print("provisioned; ./run.sh would run: " + shlex.join(command))
+    return 0
 
 
 if __name__ == "__main__":
