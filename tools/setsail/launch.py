@@ -39,7 +39,10 @@ def prepare(project_root: Path, argv: list[str]) -> list[str]:
     # Always brought up to date, not only when absent: a runtime checkout
     # pulled since the last build would otherwise launch the older binary.
     # An up-to-date build is a few seconds of checking.
-    print(f"bringing the runtime in {runtime.root} up to date (the first build takes a while)")
+    print(
+        f"bringing the runtime in {runtime.root} up to date (the first build takes a while)",
+        flush=True,
+    )
     built = subprocess.run(
         ["uv", "run", "--frozen", "python", str(runtime.build_tool)],
         cwd=runtime.root,
