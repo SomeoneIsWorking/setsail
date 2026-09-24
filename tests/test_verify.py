@@ -7,6 +7,7 @@ from pathlib import Path
 from setsail.verify import (
     CRITICAL_LINE_CAP,
     DEFAULT_LINE_CAP,
+    check_format,
     check_source_sizes,
     gate_launcher_is_a_shim,
 )
@@ -44,7 +45,8 @@ def test_a_missing_launcher_fails_rather_than_passing_quietly(tmp_path: Path) ->
 
 def test_a_launcher_that_grew_shell_logic_fails(tmp_path: Path) -> None:
     (tmp_path / "run.sh").write_text(
-        "#!/usr/bin/env sh\n" + "echo step\n" * 6
+        "#!/usr/bin/env sh\n"
+        + "echo step\n" * 6
         + 'exec uv run --frozen python bootstrap.py "$@"\n'
     )
     result = gate_launcher_is_a_shim(tmp_path)
@@ -55,3 +57,15 @@ def test_a_launcher_that_grew_shell_logic_fails(tmp_path: Path) -> None:
 def test_the_real_launcher_passes() -> None:
     result = gate_launcher_is_a_shim(Path(__file__).resolve().parent.parent)
     assert result.passed, result.detail
+
+
+def test_unformatted_python_fails_the_format_gate(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parent.parent
+    formatted = tmp_path / "formatted.py"
+    formatted.write_text("x = [1, 2]\n")
+    assert check_format(root, [formatted]).passed
+    packed = tmp_path / "packed.py"
+    packed.write_text("x=[1,2]\n")
+    result = check_format(root, [packed])
+    assert not result.passed
+    assert "packed.py" in result.detail

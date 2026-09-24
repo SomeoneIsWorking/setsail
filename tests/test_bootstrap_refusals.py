@@ -30,7 +30,11 @@ def _launch(env_extra: dict[str, str]) -> subprocess.CompletedProcess[str]:
     env.update(env_extra)
     return subprocess.run(
         [sys.executable, str(ROOT / "bootstrap.py")],
-        cwd=ROOT, env=env, capture_output=True, text=True, check=False,
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 
@@ -56,9 +60,7 @@ def test_a_path_with_the_wrong_container_is_refused(tmp_path: Path) -> None:
     runtime = _fake_runtime(tmp_path / "wiiuport")
     wrong = tmp_path / "not-a-disc-image.txt"
     wrong.write_text("x")
-    result = _launch(
-        {"SETSAIL_WIIUPORT_DIR": str(runtime), "SETSAIL_GAME": str(wrong)}
-    )
+    result = _launch({"SETSAIL_WIIUPORT_DIR": str(runtime), "SETSAIL_GAME": str(wrong)})
     assert result.returncode == 2
     assert "not one of" in result.stderr
 
@@ -66,9 +68,7 @@ def test_a_path_with_the_wrong_container_is_refused(tmp_path: Path) -> None:
 def test_a_missing_disc_image_is_refused_by_name(tmp_path: Path) -> None:
     runtime = _fake_runtime(tmp_path / "wiiuport")
     absent = tmp_path / "absent.wux"
-    result = _launch(
-        {"SETSAIL_WIIUPORT_DIR": str(runtime), "SETSAIL_GAME": str(absent)}
-    )
+    result = _launch({"SETSAIL_WIIUPORT_DIR": str(runtime), "SETSAIL_GAME": str(absent)})
     assert result.returncode == 2
     assert "not an existing file" in result.stderr
     assert str(absent) in result.stderr

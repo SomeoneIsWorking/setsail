@@ -15,6 +15,11 @@ from pathlib import Path
 ENV_GAME_PATH = "SETSAIL_GAME"
 """Maintainer override, read here and nowhere else. Never a player prerequisite."""
 
+TITLE_ID = "0005000010143500"
+"""Wind Waker HD (USA), as the runtime reads it from a disc's own metadata. The
+runtime is told it on every launch and refuses a disc that holds any other
+title, in its setup screen and at launch alike."""
+
 ACCEPTED_SUFFIXES: tuple[str, ...] = (".wux", ".wud", ".iso")
 """Disc-image containers. A title installed as a directory is a separate case
 and is not accepted until its identity check exists."""
@@ -29,9 +34,9 @@ class GameFile:
     """A path that exists and has an accepted container extension.
 
     This is *not* an identity check. Nothing here proves the file is Wind Waker
-    HD; that is state item ST-IDENT and needs the runtime's meta/meta.xml
-    reader. The distinction is kept explicit so a launch cannot later be
-    mistaken for evidence that identity was validated.
+    HD: the runtime does, reading the disc's own metadata against `TITLE_ID`,
+    because only it can decrypt the disc. The distinction is kept explicit so
+    a path accepted here is never mistaken for a validated title.
     """
 
     path: Path

@@ -12,6 +12,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from setsail.gamefile import TITLE_ID
+
 ENV_OVERRIDE = "SETSAIL_WIIUPORT_DIR"
 """Maintainer override. Read here and nowhere else; see ``config`` for policy."""
 
@@ -40,8 +42,10 @@ class RuntimeCheckout:
     def launch_command(self, game: Path | None, extra: list[str]) -> list[str]:
         """How the product is started: the title is its one positional argument,
         and with none it opens the remembered title or asks the player for one.
-        It refuses options it does not know, so none is invented here."""
-        command = [str(self.product_binary)]
+        It is always told which title this product runs, so no extra argument
+        can leave it accepting another. It refuses options it does not know, so
+        none is invented here."""
+        command = [str(self.product_binary), "--title-id", TITLE_ID]
         if game is not None:
             command.append(str(game))
         return [*command, *extra]
