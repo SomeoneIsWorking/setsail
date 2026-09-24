@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from setsail.appimage import (
     APP_NAME,
     PackageRefused,
+    check_exit,
     check_package,
     pack,
     stage,
@@ -61,6 +62,10 @@ def main() -> int:
         package = OUTPUT_DIR / f"{APP_NAME}-x86_64.AppImage"
         pack(appdir, type2, package)
         refusal = check_package(package)
+        exit_check = OUTPUT_DIR / "exit-check"
+        if exit_check.exists():
+            shutil.rmtree(exit_check)
+        left = check_exit(package, exit_check)
     except (LaunchRefused, PackageRefused) as refused:
         print(f"refused: {refused}", file=sys.stderr)
         return 2
@@ -70,6 +75,7 @@ def main() -> int:
     print(f"bundled {len(bundled)} of {manifest['linked']} libraries: " + ", ".join(bundled))
     print(f"needs glibc {manifest['glibc_floor']} or newer on the player's machine")
     print(f"started and refused another title: '{refusal}'")
+    print(f"started with no display, reported it and exited 1: '{left}'")
     return 0
 
 
