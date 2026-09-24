@@ -89,7 +89,7 @@ def test_a_failed_build_never_launches_the_binary_already_there(tmp_path: Path) 
     result = _launch({"SETSAIL_WIIUPORT_DIR": str(runtime)})
     assert result.returncode == 1
     assert "LAUNCHED" not in result.stdout
-    assert "Not launching the build that was there before" in result.stderr
+    assert "Not using the build that was there before" in result.stderr
 
 
 def test_an_up_to_date_build_launches_the_product(tmp_path: Path) -> None:
