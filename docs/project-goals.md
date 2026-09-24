@@ -40,7 +40,9 @@ simulation semantics.
   evidence tying the recovered slot to observed camera motion — not inferred from pixels.
 - Actor/object transforms are identified and blended per object, with stable identity
   across ticks so an object is never blended against a different object's state.
-- A held-still scene produces an interpolated frame byte-identical to its neighbours.
+- A held-still scene produces an interpolated frame that draws exactly what the title drew,
+  every substituted value bit-equal to its neighbours', and so no further from them than
+  the renderer's own replay of that frame is from itself.
 - A moving scene shows the interpolated frame strictly between its neighbours, verified
   by code against the two source transforms, not by eye.
 - Objects whose transform cannot be matched across ticks are presented un-blended rather
