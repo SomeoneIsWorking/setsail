@@ -1,28 +1,26 @@
 """The player's package: an asset-free AppImage of the runtime, made for this title.
 
-The AppImage holds the runtime's executable and the data it reads beside it,
-the libraries a desktop cannot be assumed to have, and a launcher that always
-names this title. It holds no game files, keys or anything derived from them:
+The AppImage holds the runtime's release bundle -- its executable, the data it
+reads beside it, and the libraries a desktop cannot be assumed to have -- and a
+launcher that always names this product and title. It holds no game files, keys or anything derived from them:
 the player chooses their own disc image on the runtime's first-run screen.
 
-Built on the maintainer's host, so the package needs a glibc at least as new as
-the one it was built against; that floor is reported, never hidden.
+The bundle is built by the runtime in its release container, which sets the
+glibc the package needs; that floor is reported, never hidden.
 """
 
 from __future__ import annotations
 
 import hashlib
-import re
+import json
 import shutil
 import struct
 import subprocess
 import zlib
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 from setsail.gamefile import TITLE_ID
-from setsail.runtime import RuntimeCheckout
 
 APP_NAME = "setsail"
 PRODUCT_NAME = "Set Sail"
@@ -33,41 +31,6 @@ TYPE2_RUNTIME_URL = (
 )
 TYPE2_RUNTIME_SHA256 = "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
 """The AppImage runtime prepended to the image, pinned by release and checksum."""
-
-HOST_PROVIDED: frozenset[str] = frozenset(
-    {
-        # The C library and its loader: the one thing an AppImage must take from the host.
-        "linux-vdso.so.1",
-        "ld-linux-x86-64.so.2",
-        "libc.so.6",
-        "libm.so.6",
-        "libgcc_s.so.1",
-        # The display, input and font stack every desktop session already runs; a
-        # bundled copy can disagree with the host's server or drivers.
-        "libX11.so.6",
-        "libxcb.so.1",
-        "libXau.so.6",
-        "libXrender.so.1",
-        "libwayland-client.so.0",
-        "libffi.so.8",
-        "libudev.so.1",
-        "libfreetype.so.6",
-        "libharfbuzz.so.0",
-        "libgraphite2.so.3",
-        "libpng16.so.16",
-        "libbrotlidec.so.1",
-        "libbrotlicommon.so.1",
-        "libbz2.so.1",
-        "libz.so.1",
-        "libglib-2.0.so.0",
-        "libpcre2-8.so.0",
-    }
-)
-"""Libraries left to the host. Everything else the executable links is bundled,
-so a new dependency is carried by default rather than missing on a player's
-machine."""
-
-_LDD_LINE = re.compile(r"^\s*(?P<name>\S+)(?: => (?P<path>\S+|not found))?(?: \(0x[0-9a-f]+\))?$")
 
 DESKTOP_ENTRY = f"""[Desktop Entry]
 Type=Application
@@ -93,71 +56,11 @@ class PackageRefused(RuntimeError):
     """The package could not be made as it must be; the message says why."""
 
 
-@dataclass(frozen=True)
-class Library:
-    name: str
-    path: Path
-
-
 Runner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 
 
 def _run(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(list(command), capture_output=True, text=True, check=False)
-
-
-def parse_ldd(output: str) -> list[Library]:
-    """Every library `ldd` resolved. A library it could not find, or a line it
-    did not recognise, refuses: either would ship a package that fails to
-    start on the player's machine."""
-    libraries: list[Library] = []
-    for line in output.splitlines():
-        if not line.strip():
-            continue
-        match = _LDD_LINE.match(line)
-        if match is None:
-            raise PackageRefused(f"ldd printed a line this cannot read: {line.strip()}")
-        name, path = match.group("name"), match.group("path")
-        if path == "not found":
-            raise PackageRefused(f"{name} is not installed, so the executable cannot start")
-        libraries.append(Library(Path(name).name, Path(path) if path else Path(name)))
-    if not libraries:
-        raise PackageRefused("ldd listed no libraries at all, which no dynamic executable has")
-    return libraries
-
-
-def libraries_to_bundle(libraries: Sequence[Library]) -> list[Library]:
-    return [library for library in libraries if library.name not in HOST_PROVIDED]
-
-
-def glibc_floor(binary_symbols: str) -> str:
-    """The newest GLIBC symbol version the executable needs, from `objdump -T`."""
-    versions = {
-        tuple(int(part) for part in found.split("."))
-        for found in re.findall(r"GLIBC_(\d+(?:\.\d+)+)", binary_symbols)
-    }
-    if not versions:
-        raise PackageRefused("the executable names no glibc version, so its floor is unknown")
-    return ".".join(str(part) for part in max(versions))
-
-
-def refuse_build_paths(binary: Path, build_paths: Sequence[Path]) -> None:
-    """Refuse an executable that names a private build path.
-
-    A path compiled in -- ``__FILE__`` in an assert or a log line, a library's
-    configured install directory -- would hand every player the builder's
-    home. The runtime's build maps its own sources relative to its checkout;
-    dependencies that record their install prefix must be built somewhere
-    that names no one.
-    """
-    contents = binary.read_bytes()
-    for path in build_paths:
-        found = contents.count(str(path).encode())
-        if found:
-            raise PackageRefused(
-                f"{binary} names {path} {found} times; build the runtime with its "
-                "compiled paths made relative to the checkout"
-            )
 
 
 def _png_chunk(kind: bytes, data: bytes) -> bytes:
@@ -207,34 +110,28 @@ def verified_type2_runtime(cache: Path, download: Callable[[str, Path], None]) -
     return cache
 
 
-def stage(
-    appdir: Path,
-    runtime: RuntimeCheckout,
-    bundled: Sequence[Library],
-    build_paths: Sequence[Path],
-) -> None:
-    """Lay the AppDir out. The executable keeps its data directories beside it,
-    where the runtime resolves them."""
-    binary_dir = appdir / "usr" / "bin"
-    library_dir = appdir / "usr" / "lib"
-    binary_dir.mkdir(parents=True)
-    library_dir.mkdir(parents=True)
-    stripped = subprocess.run(
-        ["strip", "-o", str(binary_dir / "wiiuport"), str(runtime.product_binary)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if stripped.returncode != 0:
-        raise PackageRefused(f"strip failed on the runtime executable:\n{stripped.stderr}")
-    refuse_build_paths(binary_dir / "wiiuport", build_paths)
-    for data in ("resources", "gameProfiles"):
-        source = runtime.product_binary.parent / data
-        if not source.is_dir():
-            raise PackageRefused(f"the runtime's {data} directory is missing at {source}")
-        shutil.copytree(source, binary_dir / data)
-    for library in bundled:
-        shutil.copy2(library.path, library_dir / library.name)
+BUNDLE_MANIFEST = "runtime.json"
+BUNDLE_LAYOUT = {"executable": "usr/bin/wiiuport", "libraries": "usr/lib"}
+"""Where the runtime's bundle puts what the launcher above names."""
+
+
+def stage(appdir: Path, bundle: Path) -> dict[str, object]:
+    """Lay the AppDir out from the runtime's release bundle, and return its manifest.
+
+    The bundle is the runtime's: its executable, data and libraries. This adds
+    what makes it this product -- the launcher, the desktop entry and the icon.
+    """
+    manifest_path = bundle / BUNDLE_MANIFEST
+    if not manifest_path.is_file():
+        raise PackageRefused(f"{bundle} is not a staged runtime bundle: {manifest_path} is missing")
+    manifest: dict[str, object] = json.loads(manifest_path.read_text())
+    for key, expected in BUNDLE_LAYOUT.items():
+        if manifest.get(key) != expected:
+            raise PackageRefused(
+                f"the bundle puts its {key} at {manifest.get(key)!r}, but the launcher runs "
+                f"{expected!r}"
+            )
+    shutil.copytree(bundle / "usr", appdir / "usr")
     app_run = appdir / "AppRun"
     app_run.write_text(APP_RUN)
     app_run.chmod(0o755)
@@ -242,6 +139,7 @@ def stage(
     icon = icon_png()
     (appdir / f"{APP_NAME}.png").write_bytes(icon)
     (appdir / ".DirIcon").write_bytes(icon)
+    return manifest
 
 
 def pack(appdir: Path, type2_runtime: Path, output: Path, run: Runner = _run) -> None:

@@ -35,6 +35,15 @@ class RuntimeCheckout:
         return self.root / "tools" / "build_runtime.py"
 
     @property
+    def release_tool(self) -> Path:
+        return self.root / "tools" / "build_release_runtime.py"
+
+    @property
+    def release_bundle(self) -> Path:
+        """The release runtime, staged relocatable by ``release_tool``."""
+        return self.root / "build" / "release" / "bundle"
+
+    @property
     def product_binary(self) -> Path:
         """The runtime's own executable, beside the data root it reads at startup."""
         return self.root / "external" / "cemu" / "bin" / "wiiuport"

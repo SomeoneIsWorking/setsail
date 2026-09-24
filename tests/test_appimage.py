@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import struct
 import subprocess
 import zlib
@@ -13,51 +14,6 @@ import pytest
 from setsail import appimage
 from setsail.appimage import PackageRefused
 from setsail.gamefile import TITLE_ID
-
-LDD_OUTPUT = """\
-\tlinux-vdso.so.1 (0x00007ffc5a1f2000)
-\tlibbluetooth.so.3 => /lib64/libbluetooth.so.3 (0x00007f0e4c000000)
-\tlibstdc++.so.6 => /lib64/libstdc++.so.6 (0x00007f0e4bc00000)
-\tlibc.so.6 => /lib64/libc.so.6 (0x00007f0e4b800000)
-\t/lib64/ld-linux-x86-64.so.2 (0x00007f0e4c200000)
-"""
-
-
-def test_ldd_output_is_read_into_every_library() -> None:
-    libraries = appimage.parse_ldd(LDD_OUTPUT)
-    assert [library.name for library in libraries] == [
-        "linux-vdso.so.1",
-        "libbluetooth.so.3",
-        "libstdc++.so.6",
-        "libc.so.6",
-        "ld-linux-x86-64.so.2",
-    ]
-    assert libraries[1].path == Path("/lib64/libbluetooth.so.3")
-
-
-def test_only_what_a_desktop_cannot_be_assumed_to_have_is_bundled() -> None:
-    bundled = appimage.libraries_to_bundle(appimage.parse_ldd(LDD_OUTPUT))
-    assert [library.name for library in bundled] == ["libbluetooth.so.3", "libstdc++.so.6"]
-
-
-@pytest.mark.parametrize(
-    ("output", "reason"),
-    [
-        ("\tlibmissing.so.1 => not found\n", "not installed"),
-        ("\tstatically linked, somehow\n", "cannot read"),
-        ("\n\n", "no libraries"),
-    ],
-)
-def test_ldd_output_that_would_ship_a_broken_package_is_refused(output: str, reason: str) -> None:
-    with pytest.raises(PackageRefused, match=reason):
-        appimage.parse_ldd(output)
-
-
-def test_the_glibc_floor_is_the_newest_version_named() -> None:
-    symbols = "memcpy GLIBC_2.14\nfoo GLIBC_2.43\nbar GLIBC_2.2.5\nbaz GLIBC_2.9\n"
-    assert appimage.glibc_floor(symbols) == "2.43"
-    with pytest.raises(PackageRefused):
-        appimage.glibc_floor("no versions here")
 
 
 def test_the_type2_runtime_is_refused_unless_it_is_the_pinned_one(tmp_path: Path) -> None:
@@ -117,11 +73,39 @@ def test_a_package_that_does_not_start_as_this_product_is_refused(
         appimage.check_package(Path("pkg"), _answer(returncode, stderr))
 
 
-def test_an_executable_naming_where_it_was_built_is_refused(tmp_path: Path) -> None:
-    checkout = Path("/builds/maintainer/wiiuport")
-    binary = tmp_path / "wiiuport"
-    binary.write_bytes(b"\x7fELF...wiiuport/src/Main.cpp\x00assert failed\x00")
-    appimage.refuse_build_paths(binary, (checkout,))
-    binary.write_bytes(b"\x7fELF.../builds/maintainer/wiiuport/src/Main.cpp\x00")
-    with pytest.raises(PackageRefused, match="names /builds/maintainer/wiiuport 1 times"):
-        appimage.refuse_build_paths(binary, (checkout,))
+def _bundle(root: Path, executable: str = "usr/bin/wiiuport") -> Path:
+    (root / "usr" / "bin").mkdir(parents=True)
+    (root / "usr" / "lib").mkdir()
+    (root / "usr" / "bin" / "wiiuport").write_bytes(b"ELF")
+    (root / "usr" / "lib" / "libstdc++.so.6").write_bytes(b"lib")
+    manifest = {
+        "executable": executable,
+        "libraries": "usr/lib",
+        "glibc_floor": "2.39",
+        "bundled": ["libstdc++.so.6"],
+        "linked": 20,
+    }
+    (root / "runtime.json").write_text(json.dumps(manifest))
+    return root
+
+
+def test_the_appdir_is_the_runtimes_bundle_made_this_product(tmp_path: Path) -> None:
+    appdir = tmp_path / "AppDir"
+    manifest = appimage.stage(appdir, _bundle(tmp_path / "bundle"))
+    assert manifest["glibc_floor"] == "2.39"
+    assert (appdir / "usr" / "bin" / "wiiuport").read_bytes() == b"ELF"
+    assert (appdir / "usr" / "lib" / "libstdc++.so.6").is_file()
+    assert (appdir / "AppRun").read_text() == appimage.APP_RUN
+    assert f"Name={appimage.PRODUCT_NAME}" in (appdir / "setsail.desktop").read_text()
+
+
+def test_a_directory_that_is_not_the_bundle_the_launcher_expects_is_refused(
+    tmp_path: Path,
+) -> None:
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(PackageRefused, match="not a staged runtime bundle"):
+        appimage.stage(tmp_path / "one", empty)
+    moved = _bundle(tmp_path / "moved", executable="bin/wiiuport")
+    with pytest.raises(PackageRefused, match="puts its executable"):
+        appimage.stage(tmp_path / "two", moved)
