@@ -24,7 +24,7 @@ setsail never reimplements runtime, GPU, record/replay, or control-channel mecha
 | Blend policy (what is interpolated, at what phase, what is excluded) | `src/setsail/interp/` | Supplied to `wiiuport`'s title-neutral substitution interface. |
 | First-run setup wording and acceptance rules | `src/setsail/setup/` | Mechanics come from `shared/setup-ui`. |
 | Save and settings location | `src/setsail/config/` | OS user-data location; never the checkout or an AppImage mount. Also the single owner of environment reads. |
-| Packaging and release evidence | `tools/` (Python) | Asset-free AppImage; frame-time percentiles with the tested hardware. |
+| The player's package | `tools/setsail/appimage.py`, entry `tools/package_appimage.py` | Asset-free AppImage of the runtime: bundles what a desktop cannot be assumed to have, a launcher fixing the product's name and title, and a start-up check that the package refuses another title as the runtime does. Tested in `tests/test_appimage.py`. |
 | Launcher | `run.sh` -> `bootstrap.py` | Zero-argument path launches the game. Diagnostics and verification are separate named Python tools and never route through it. |
 
 ## Where interpolation splits between the two projects

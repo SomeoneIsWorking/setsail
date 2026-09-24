@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 from setsail.gamefile import GameFileUnavailable, from_environment
-from setsail.runtime import RuntimeNotFound, resolve
+from setsail.runtime import RuntimeCheckout, RuntimeNotFound, resolve
 
 
 class LaunchRefused(RuntimeError):
@@ -25,20 +25,21 @@ class LaunchRefused(RuntimeError):
         self.exit_code = exit_code
 
 
-def prepare(project_root: Path, argv: list[str]) -> list[str]:
-    """The command that starts the product, with its runtime built."""
+def resolve_runtime(project_root: Path) -> RuntimeCheckout:
+    """The runtime checkout, or a refusal naming where it was looked for."""
     try:
-        runtime = resolve(project_root)
+        return resolve(project_root)
     except RuntimeNotFound as error:
         raise LaunchRefused(str(error), 2) from error
-    try:
-        game = from_environment()
-    except GameFileUnavailable as error:
-        raise LaunchRefused(str(error), 2) from error
 
-    # Always brought up to date, not only when absent: a runtime checkout
-    # pulled since the last build would otherwise launch the older binary.
-    # An up-to-date build is a few seconds of checking.
+
+def bring_up_to_date(runtime: RuntimeCheckout) -> None:
+    """Build the runtime, refusing rather than using whatever build was there.
+
+    Always brought up to date, not only when absent: a runtime checkout pulled
+    since the last build would otherwise run the older binary. An up-to-date
+    build is a few seconds of checking.
+    """
     print(
         f"bringing the runtime in {runtime.root} up to date (the first build takes a while)",
         flush=True,
@@ -51,13 +52,23 @@ def prepare(project_root: Path, argv: list[str]) -> list[str]:
     if built.returncode != 0:
         raise LaunchRefused(
             "building the runtime failed; its output is above. "
-            "Not launching the build that was there before.",
+            "Not using the build that was there before.",
             1,
         )
     if not runtime.product_binary.is_file():
         raise LaunchRefused(
             f"the runtime reported success but {runtime.product_binary} does not exist; "
-            "refusing to launch a stale or absent build",
+            "refusing to use a stale or absent build",
             1,
         )
+
+
+def prepare(project_root: Path, argv: list[str]) -> list[str]:
+    """The command that starts the product, with its runtime built."""
+    runtime = resolve_runtime(project_root)
+    try:
+        game = from_environment()
+    except GameFileUnavailable as error:
+        raise LaunchRefused(str(error), 2) from error
+    bring_up_to_date(runtime)
     return runtime.launch_command(None if game is None else game.path, argv)
