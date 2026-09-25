@@ -235,6 +235,36 @@ and the shadow volumes `3ec2040d` and `ce43cd08` read the same buffers. At the h
 buffers `0x250` apart with the vertex bytes' guest address at buffer `+0x148`; `r5` is how
 many buffers it flushes. A line has no age, since it lives as long as what holds it.
 
+## The frame loop, recovered from the executable
+
+Measured with wiiuport's caller census (`WIIUPORT_CALLER_CENSUS`, `GET /callers`) in one
+headless run: each function below ran exactly once per tick (2,771 calls over 2,769 ticks),
+each from the one call site named.
+
+The logic thread runs the GameCube's tick unchanged in shape. `fapGm_Execute` (`0x025d42ec`,
+called from the main loop's body `0x025f172c`) calls `fpcM_Management(0, fapGm_After)`
+(`0x025df948`, found by its `f_pc_manager.cpp` asserts), which runs every process's execute
+(`fpcEx_Handler`, `0x025df5c0`), then every process's draw (`fpcDw_Handler`, `0x025de37c`,
+with `fpcM_DrawIterater` `0x025df908`), then `fapGm_After` (`0x025d42c4`: scene, overlap and
+camera management). The GameCube painted the previous tick's lists at the top of
+`fpcM_Management` (`cAPIGph_Painter`); HD's call there is the rumble update (`0x025f2b08`)
+instead, and HD's `g_cAPI_Interface` (`0x1018c498`) names `mDoGph_Create` `0x025f0550`,
+before-of-draw `0x025f03c4` (resets the draw list at game info `+0x5d30`), after-of-draw
+`0x025f03f0` (game info `+0x60ec`) and a painter `0x025f094c` that is `li r3,1; blr`.
+
+HD paints on a display thread of its own: `0x0274c00c` calls its display's vtable slot `0xcc`
+(`0x0274c264`, the frame) forever. The display (vtable `0x10004e88`) runs per frame: slot
+`0xd4` `0x0274c67c` (begin), `0xdc` `0x02034ffc` (the title's override, which draws a tree of
+render nodes through `0x02747c6c`/`0x02747bdc`, each node's draw through its own vtable),
+`0x6c` `0x02747818` (a list of render objects), `0xec` `0x020350c4` (`GX2DrawDone`, the swap
+`GX2SwapScanBuffers` in `0x0274c8c4`, ProcUI) and `0xe4` `0x0274c874` (`GX2WaitForVsync`).
+
+So the title builds a tick's draw lists on its logic thread and paints them on the display
+thread. A second paint per tick, of blended state, belongs on that thread; not yet known: how
+the two threads hand a tick over, and where each model's matrices are when painted (J3D's
+draw matrices are double-buffered on the GameCube, which would leave the previous tick's
+beside this one's).
+
 ## Limits of what has been measured
 
 **The camera finding rests on four consecutive frames** captured at frame 300 of an
