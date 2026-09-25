@@ -175,10 +175,10 @@ silently and only on the frames where two actors pass close.
 The 38 keys that are not single-parity are not explained yet and are recorded so they are
 not mistaken for noise later.
 
-## The ripple rings, recovered from the executable
+## The quad effects, recovered from the executable
 
-The rings a swimmer or a boat leaves on the water (vertex shader `8cecd19741c6c1c7`) carry
-no identity in their vertices: each draw is one quad of four world-space positions with
+The rings a swimmer or a boat leaves on the water and the sea's wave crests (vertex shader
+`8cecd19741c6c1c7`) carry no identity in their vertices: each draw is one quad of four world-space positions with
 the fixed UVs (0,0), (1,0), (1,1), (0,1). Their identity was recovered from `code/cking.rpx`
 with the wiiuport maintainer tools (`wiiuport_title_files` extracts it, `rpx_to_elf.py`
 links it for Ghidra), read against the GameCube decompilation (zeldaret/tww):
@@ -197,6 +197,27 @@ links it for Ghidra), read against the GameCube decompilation (zeldaret/tww):
 So a ring's identity is its particle's address, and a particle reborn in the same pool
 slot is told from one that continues by its age. That `mCurFrame` restarts when JPA reuses the
 particle is read from the decompilation (`JPABaseParticle::init*` sets it to 0), not yet measured live.
+
+The ripple draw is one of the particle writers that end with one commit, `0x02825158`
+(`commit(particle, store)`): it flushes the particle's written buffer (`store == 0`: the
+store at `+0xe0`; otherwise a second store at `+0xe4`) and flips it. The ripple draw and
+14 JPA draw executors (`0x02832b34`..`0x02835a20`, which billboard each corner through the
+view matrix) call it. Live it runs about 13 times a tick, and `8cecd197` draws about 134
+quads, so the particles are only a tenth of that shader.
+
+The rest are the sea's wave crests: `drawWave` over `dKankyo_wave_Packet::mEff[]` in
+`d_kankyo_rain.cpp`, HD's `0x02574d38`. Each wave `i` (stride `0x38` from packet `+0xa0`;
+`+0x24` from there its counter, `sin` of which scales it and which only rises while the
+wave lives) owns a vertex store at packet `+0x424c + i * 0x4c0`, two buffers of `0x254`
+chosen by the flip at `+0x4a8`. The writer fills the quad, flushes it through the title's
+vertex-buffer flush `0x027b5e94` (`flush(buffer, offset, size)`; the vertex bytes' guest
+address at buffer `+0x140`) from `0x02575484`, and flips. At that call `r30` holds the
+packet and `r23` the index. A wave that strays past the spawn radius is moved elsewhere in
+its slot with its alpha set to 0 (`wave_move`), not reborn with a new counter.
+
+The same flush has 66 call sites. `ca2d0854ee6b264d`'s quads come from `0x02575b6c`,
+which flushes its 2 × 300 buffers in one batch after drawing; `197fcd05d9572df3`'s 1.5 KB
+meshes are flushed by a shared double-buffer helper, `0x027ff1d8`.
 
 ## Limits of what has been measured
 
