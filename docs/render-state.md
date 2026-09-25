@@ -217,7 +217,13 @@ its slot with its alpha set to 0 (`wave_move`), not reborn with a new counter.
 
 The same flush has 66 call sites. `ca2d0854ee6b264d`'s quads come from `0x02575b6c`,
 which flushes its 2 × 300 buffers in one batch after drawing; `197fcd05d9572df3`'s 1.5 KB
-meshes are flushed by a shared double-buffer helper, `0x027ff1d8`.
+meshes are flushed by a shared double-buffer helper, `0x027ff1d8`, called from
+`0x025ed1bc` (returning to `0x025edb2c`) and `0x025ec62c` (`0x025ed110`), which assert
+`size_p != 0` in `m_Do_ext.cpp`: they are `mDoExt_3DlineMat*::update`, the 3D lines
+(ropes and cords). Each line owns its vertex set, so a line's buffers are its identity,
+and the shadow volumes `3ec2040d` and `ce43cd08` read the same buffers. Naming them through
+`DrawObjects` would need the object index keyed by shader as well (three shaders read one
+buffer) and objects without an age, since a line has none; not done.
 
 ## Limits of what has been measured
 
