@@ -215,9 +215,18 @@ address at buffer `+0x140`) from `0x02575484`, and flips. At that call `r30` hol
 packet and `r23` the index. A wave that strays past the spawn radius is moved elsewhere in
 its slot with its alpha set to 0 (`wave_move`), not reborn with a new counter.
 
-The same flush has 66 call sites. `ca2d0854ee6b264d`'s quads come from `0x02575b6c`,
-which flushes its 2 × 300 buffers in one batch after drawing; `197fcd05d9572df3`'s 1.5 KB
-meshes are flushed by a shared double-buffer helper, `0x027ff1d8`, called from
+The same flush has 66 call sites. `ca2d0854ee6b264d`'s quads are the sky's cloud cards:
+`drawVrkumo` over `dKankyo_vrkumo_Packet::mInst[100]`, HD's `0x02575b6c`, reading the
+packet at env light `+0xa94` (the GameCube's `mpVrkumoPacket` at `0xA14`; HD's fields sit
+`0x80` past the GameCube's, the wave packet at `+0xaa0` against `0xA20`). HD draws two
+groups of three layers of 100 cards, each card owning a buffer pair at packet
+`+0x11dc + group * 0x574f8 + card * 0x4a8` (`0x254` apart), with one flip per group at
+group `+0x574e0`. It flushes all 300 pairs of a group in one batch after drawing, from
+`0x02576ff0` and `0x0257703c`; at each call `r31` holds the address of the group's flip, so
+a card's first buffer is `r3 - flip * 0x254`. `vrkumo_move` moves a card that strays
+past its radius elsewhere with its alpha at 0 rather than renewing it, so a card has no age.
+
+`197fcd05d9572df3`'s 1.5 KB meshes are flushed by a shared double-buffer helper, `0x027ff1d8`, called from
 `0x025ed1bc` (returning to `0x025edb2c`) and `0x025ec62c` (`0x025ed110`), which assert
 `size_p != 0` in `m_Do_ext.cpp`: they are `mDoExt_3DlineMat*::update`, the 3D lines
 (ropes and cords). Each line owns its vertex set, so a line's buffers are its identity,
