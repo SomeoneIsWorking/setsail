@@ -221,9 +221,10 @@ meshes are flushed by a shared double-buffer helper, `0x027ff1d8`, called from
 `0x025ed1bc` (returning to `0x025edb2c`) and `0x025ec62c` (`0x025ed110`), which assert
 `size_p != 0` in `m_Do_ext.cpp`: they are `mDoExt_3DlineMat*::update`, the 3D lines
 (ropes and cords). Each line owns its vertex set, so a line's buffers are its identity,
-and the shadow volumes `3ec2040d` and `ce43cd08` read the same buffers. Naming them through
-`DrawObjects` would need the object index keyed by shader as well (three shaders read one
-buffer) and objects without an age, since a line has none; not done.
+and the shadow volumes `3ec2040d` and `ce43cd08` read the same buffers. At the helper's call
+`r3` is the line's set: per list (count, first buffer) 8 bytes each, the flip at `+0x1c`,
+buffers `0x250` apart with the vertex bytes' guest address at buffer `+0x148`; `r5` is how
+many buffers it flushes. A line has no age, since it lives as long as what holds it.
 
 ## Limits of what has been measured
 
