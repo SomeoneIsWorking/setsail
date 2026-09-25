@@ -175,6 +175,29 @@ silently and only on the frames where two actors pass close.
 The 38 keys that are not single-parity are not explained yet and are recorded so they are
 not mistaken for noise later.
 
+## The ripple rings, recovered from the executable
+
+The rings a swimmer or a boat leaves on the water (vertex shader `8cecd19741c6c1c7`) carry
+no identity in their vertices: each draw is one quad of four world-space positions with
+the fixed UVs (0,0), (1,0), (1,1), (0,1). Their identity was recovered from `code/cking.rpx`
+with the wiiuport maintainer tools (`wiiuport_title_files` extracts it, `rpx_to_elf.py`
+links it for Ghidra), read against the GameCube decompilation (zeldaret/tww):
+
+- `0x025a6c3c` is `dPa_ripplePcallBack::draw(JPABaseEmitter*, JPABaseParticle*)`, reached
+  only through its vtable slot `0x100523c4` (vtable `0x10052398`, installed by
+  `d_particle.cpp`'s static initialiser `0x025aa790`). It writes one particle's quad:
+  20 floats, stride 20, each corner the particle's position plus its rotated half-extents,
+  dropped onto the water height, then draws it with `GX2DrawIndexedEx` through `0x02825284`.
+- Its third argument (`r5`) is the particle. The GameCube layout holds where HD's code
+  reads it: `+0x28` `mGlobalPosition`, `+0x78` `mCurFrame` (the particle's age),
+  `+0xc0` `mRotateAngle`. HD adds `+0xe0`: the particle's own vertex store, two buffers
+  at `+0x000` and `+0x254` (each's first word the vertex bytes' guest address) chosen by
+  the flip word at `+0x950`. That is why ring draws alternate between two buffers.
+
+So a ring's identity is its particle's address, and a particle reborn in the same pool
+slot is told from one that continues by its age. That `mCurFrame` restarts when JPA reuses the
+particle is read from the decompilation (`JPABaseParticle::init*` sets it to 0), not yet measured live.
+
 ## Limits of what has been measured
 
 **The camera finding rests on four consecutive frames** captured at frame 300 of an
