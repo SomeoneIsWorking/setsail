@@ -563,6 +563,26 @@ by name over a slot that does not hold this title's frame. The cost is exact and
 -- a title that swapped that slot at runtime would keep painting the frame that was verified --
 and the benefit is the whole mechanism, since the re-reading form does not run at all.
 
-For the title this changes nothing about what may be patched: a slot of the vtable the display
-already calls, and the frame function it already points at. The constraint the indirect call
-imposed is the emulator's, not the game's.
+Two paints in one iteration, though, is a different matter: calling the frame twice with `bl` took
+the emulator down with signal 11 at a host address on the first frame, because the frame returns
+through `blr` and the payload's own call had put the link register inside the stand-in's memory.
+A return into the loader's trampoline arena does not work here, which is the same class of failure
+as the indirect call and points at the same thing: register-indirect branches whose target is that
+arena.
+
+So the working form does everything on the way out. It asks the title's own
+`GX2SetSwapInterval(1)` -- the call at `0x0274bafc` made with one instead of what `display+0x50`
+held -- puts the link register back where the loop's own `bctrl` at `0x0274c030` left it, and
+reaches the frame with a plain branch so the frame's return goes to `0x0274c034`, the loop's own
+branch back to its top.
+
+**Which makes the rate the interval's doing, not the second paint's.** The frame waits for its
+flip and the flip is what paces the loop, so one vblank a flip is what doubles the picture. The
+second paint is still wanted -- it is what will carry the blend -- but it cannot be a second call
+inside one iteration, and where it has to come from instead is the next thing to work out: an
+iteration that paints the blend and an iteration that paints the tick's own frame, chosen by a
+counter, each still leaving by a branch into the title's own code.
+
+For the title none of this changes what may be patched: a slot of the vtable the display already
+calls, and the frame function it already points at. The constraint the indirect call and the return
+both impose is the emulator's, not the game's.
