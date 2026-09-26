@@ -325,13 +325,58 @@ to three int16 uniform-*block* indices (vertex, geometry, pixel) and an optional
 pointer at `+0x14`. The block's address and size are not in the record: they come from a
 descriptor list at `param_2+0x14`, an array of `0x1c`-byte entries counted at `+0x4c`.
 
-So the chain is the game's own, all the way down: node, then draw record, then uniform block
-index, then block memory. The matrices are inside that block memory, which is the same memory
-the host reads today -- what the guest knows and the host had to guess is *which node* each
-block belongs to, and that the node's own draw regenerates the rest (attributes, skinning,
-display list) at whatever pose it is handed. Not yet read: which field of the node holds the
-pose, and whether tick N-1's block contents are still there when tick N paints. That is the
-next step, and it decides whether the blend is one hook or several.
+### The node, its records, and where the matrix actually is
+
+Read further on 2026-09-26. The chain is the game's own all the way down, and the last link is
+not what the section above guessed.
+
+The node object is built by `FUN_0215d9d4`, which allocates 0x264c bytes and sets, in order:
+its vtable at `+0xc` to `0x1001061c`; two sub-objects at `+0xa1c` and `+0xac4`, with vtables at
+`+0xa28` (`0x1016ef84`) and `+0xad0` (`0x1016efb4`); a four-slot pool of 0x254-byte draw
+records at `+0xa8`; and a 0x2f0-byte block at `+0xb38`. The base class's slot `+0xc` is
+`0x02160018` -- the draw this document found earlier through the derived vtable at `0x10036300`,
+which turns out not to override it, so the two are the same function and the derived class is
+one of several that share it.
+
+`0x02160018` walks the node's own draw records: the array at `+0xa4` with a count at `+0xa0`,
+five or six words each, and `param_2+0xc` selects which of three sub-passes is being drawn. A
+record carries a display list at `+0`, an optional pointer at `+0xc`, a pointer at `+0x10` to
+a small table of int16 uniform-block indices, and an optional pointer at `+0x14`.
+
+**The two sub-objects are uniform-block binders, and that is the useful part.**
+`0x1016ef84` slot `+0x2c` is `0x027ff88c` and `0x1016efb4` slot `+0x2c` is `0x027ff9c0`; the two
+are the same function apart from which triple of indices they read -- `param_2+0x10+0x28`
+against `+0x3c` -- and both do this and nothing else:
+
+```
+iVar2 = param_1 + 0x10 + *(int *)(param_1 + 0x4c) * 0x1c;   /* one past the last entry */
+uVar4 = *(undefined4 *)(iVar2 + 0xc);                        /* the block's offset */
+uVar6 = *(undefined4 *)(iVar2 + 4);                          /* the block's size   */
+GX2SetPixelUniformBlock(iVar1, uVar4, uVar6);
+GX2SetVertexUniformBlock(iVar5, uVar4, uVar6);
+GX2SetGeometryUniformBlock(iVar2, uVar4, uVar6);
+```
+
+So the block's address and size are computed by the game's own code, per object, per pass, at
+the moment it binds them -- from a descriptor list of 0x1c-byte entries counted at `+0x4c`.
+
+**Which corrects the guess above.** The pose is *not* a field of the node. The matrix is inside
+the uniform block's memory, and the node's draw only names the block. (The 0x2f0-byte block at
+`+0xb38` is not it either: the constructor fills it with `0.0f` from `0x10145180` and `1.0f`
+from `0x1014517c`, and those two ones sit at `+0x1c` and `+0x2c` into it, which is not a 3x4 laid
+out any way -- an earlier reading of that as an identity matrix was wrong, and the constants
+say so.)
+
+What this changes for the blend: the hook that has the object's identity *and* the block's
+address and size in hand at the same time is the binder, one function the game already calls
+once per object per pass -- not the node draw, and certainly not the 110 call sites that bind
+uniform blocks across the shader families. A stand-in for `0x027ff88c` would see, for every
+object the title draws, which block it is about to bind and how big it is.
+
+Still not known, and it decides whether the blend is one hook or several: **whether tick N-1's
+block contents are still there when tick N paints.** The descriptor list is counted at `+0x4c`
+and nothing read yet says whether the title keeps two of everything. That is the next step, and
+it is a read of who fills that list, not a measurement.
 
 **The game names its own view uniforms.** Its rodata carries `cWorldViewMatrix[0]` at
 `0x10163bb4` and `cWorldViewProjectionMatrix[0]` at `0x10163d00`, beside `uBlurOffset`,
