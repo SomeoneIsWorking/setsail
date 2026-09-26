@@ -61,7 +61,27 @@ simulation semantics.
 estimation, no reading back rendered pixels to decide geometry, no content-dependent
 sampling. Every blended value has explicit provenance.
 
-**Non-goals.** Changing the game's tick rate. Image-space frame generation.
+**Non-goals.** Changing the game's tick rate. Image-space frame generation. The
+non-goal is about the *rate*, and the mechanism does not touch it: the picture's rate
+comes from the flip and the logic keeps its own. What it does change is named here
+rather than left to be discovered -- one word of a vtable the display thread already
+calls, the title's own record of the interval it asked for, the emulator's flip pacing,
+and, for a title whose logic is slaved to the flip, a gate in the logic path. That last
+one is this project's finding and not an assumption: the gate's shape, its counters and
+what it does to the simulation are title policy and live with the title's other
+evidence, in `docs/render-state.md`.
+
+**Ownership.** The emulator-side capability — writing into guest code space, reading and
+writing guest words in the guest's own order, invalidating what was compiled over them,
+and setting the flip pacing — is title-neutral and belongs to the port, which offers it
+without knowing any title. Everything that names *this* title is this project's: the
+addresses, the payloads, which of the three effects a given presentation mode needs, the
+ring of per-object uniform blocks, and the decision to lerp N-1 into N. The title project
+is not a C++ project, so the code that carries those addresses is written in the port's
+`title` namespace rather than here; what is kept here is the evidence they rest on and
+the decision they encode, and the port's `docs/project-state.md` reports what was
+measured. A payload whose word came from a statistical search rather than from the
+title's image does not belong to either, and is not to be written.
 
 ## GOAL-EVIDENCE — Interpolation is proven, not asserted
 
