@@ -265,6 +265,152 @@ the two threads hand a tick over, and where each model's matrices are when paint
 draw matrices are double-buffered on the GameCube, which would leave the previous tick's
 beside this one's).
 
+### The paint, read from the executable
+
+Read on 2026-09-26 out of the title's own RPX, converted by `wiiuport`'s `rpx_to_elf.py`
+and disassembled; every address below is that image's, so it is the address the running title
+executes. This is the display thread's frame, `0x0274c264`, called through the display vtable
+at `0x10004e88` (slot `0xc4` `0x0274c00c` is the thread entry, `0xcc` the frame). In order:
+
+| step | code | what it does |
+|---|---|---|
+| begin | slot `0xd4` `0x0274c67c` | frame begin |
+| the world's paint | slot `0xdc` `0x02034ffc` | takes the render tree at `display+0x1c`, asks its vtable `+0xc` whether it is drawn (`0x02746790` on `node+0x40`), then walks it |
+| object list | slot `0x6c` `0x02747818` | the list of render objects |
+| draw done and flip | slot `0xec` `0x020350c4` | `GX2DrawDone`, then the swap in `0x0274c8c4` |
+| GPU timing | `0x0274c038` | four `GX2GPUTimeToCPUTime` reads: the title's own frame statistics |
+| frame counter | `0x02760e58` | `display+0x78` advances; `display+0x80` takes `OSGetSystemTime` |
+| wait | slot `0xe4` `0x0274c874` | the only pacing in the whole display path |
+
+Two things follow, and they are what a second paint per tick rests on.
+
+**The paint holds nothing that a second pass would consume.** The tree walk is `0x02746790`
+to `0x02747c6c` to `0x02747bdc`, and `0x02747bdc` is this in full: draw the node through the
+vtable at `node+0x2c` unless `node+0x44` bit 0 is set, then recurse the sibling chain at
+`node+4` unless `node+0x44` bit 1 is set. It reads flags and pointers and writes nothing: no
+cursor, no pop, nothing to rewind. The frame function around it is straight-line calls. So
+painting the same tick's tree twice in one tick is not fighting a consumed stream; it is
+calling the same function again with the same tree.
+
+**The frame rate is one thing.** `0x0274c874` is
+`do { GX2WaitForVsync(); GX2GetSwapStatus(&requested, &done, ..); } while (done < requested);`
+and the flip is `GX2SwapScanBuffers()` in `0x0274c8c4`, taken when `display+0x28 == 2`. The
+title calls `GX2SetSwapInterval(2)` once (ISSUE-003 in wiiuport), so a frame is two vblanks
+and the display thread runs at 30 Hz. `0x0274c00c` is `do { vtable[0xcc](display); } while
+(true)`, so the display thread paces itself and nothing in the frame function asks the logic
+thread for anything. Presentation at 60 Hz is therefore this thread's swap interval and its
+paint count. One caveat, because it is the one place a second paint could still stall: slot
+`0xdc` also calls `0x02799c70`, `0x0272a8c4` and `0x0272ad80`, which are not read yet, and
+any of them could be where the paint waits for the tick. A run answers that; the static
+claim does not.
+
+**Where the logic's rate comes from is not in these functions.** The logic frame is
+`0x0203593c`, which reaches the tick `0x025f172c` and returns; the tick advances its own
+counter at `0x1048d0a8` and compares it against a period at `0x1048d0ac`, and it contains no
+wait and no loop either. The frame is reached through a 16-byte descriptor table at
+`0x10005000` -- entry, `0x00140000`, stack -- which `0x02035b88` and `0x020355f8` start. So
+whatever paces the logic thread is outside all three, and has not been read yet. It is a
+question a run answers rather than the reverse: if the display paints twice a tick and the
+logic rate stays 30 Hz, nothing was slaved to the flip; if it doubles, the gate belongs in
+the logic path and its rate is the measurement that says so.
+
+**The per-object draw, and therefore the place a blend belongs.** The tree walk reaches each
+object's draw through the vtable at `node+0x2c`, slot `+0xc`. One class is confirmed: vtable
+`0x10036300`, slot `+0xc` = `0x02160018`, which takes the node and a sub-pass index, and for
+each of three sub-passes binds vertex, geometry and pixel uniform *blocks* and then calls
+three more methods on the node through its own vtable `+0x2c`. What it holds is a per-object
+draw record: the node keeps an array of them at `node+0xa4` with a count at `node+0xa0`, five
+or six words each, and the record carries a display list at `+0`, an optional pointer at `+0xc`
+to three int16 uniform-*block* indices (vertex, geometry, pixel) and an optional second
+pointer at `+0x14`. The block's address and size are not in the record: they come from a
+descriptor list at `param_2+0x14`, an array of `0x1c`-byte entries counted at `+0x4c`.
+
+So the chain is the game's own, all the way down: node, then draw record, then uniform block
+index, then block memory. The matrices are inside that block memory, which is the same memory
+the host reads today -- what the guest knows and the host had to guess is *which node* each
+block belongs to, and that the node's own draw regenerates the rest (attributes, skinning,
+display list) at whatever pose it is handed. Not yet read: which field of the node holds the
+pose, and whether tick N-1's block contents are still there when tick N paints. That is the
+next step, and it decides whether the blend is one hook or several.
+
+**The game names its own view uniforms.** Its rodata carries `cWorldViewMatrix[0]` at
+`0x10163bb4` and `cWorldViewProjectionMatrix[0]` at `0x10163d00`, beside `uBlurOffset`,
+`uOneMinusNearDivFar`, `cAngleScale`, `cColorScale`, `cInvTexSize`, `cFrameRCP1H` and
+`cToyCam_Saturation1`, all referenced from one name-table function `0x02786520`. The matrix
+this document's first section finds by watching which shaders share an orthonormal 3x4 and
+how it moves is, in the title's own words, a uniform called `cWorldViewMatrix`.
+
+### The display loop, byte for byte, and what a second paint costs
+
+The display thread's whole entry point is eleven instructions, `0x0274c00c` to `0x0274c034`,
+and `0x0274c038` -- the GPU-timing function -- begins immediately after, so there is no slack
+past the last one. Read out of the title's own image:
+
+| address | word | instruction |
+|---|---|---|
+| `0x0274c00c` | `7c0802a6` | `mfspr r0,LR` |
+| `0x0274c010` | `9421fff0` | `stwu r1,-0x10(r1)` |
+| `0x0274c014` | `93e1000c` | `stw r31,0xc(r1)` |
+| `0x0274c018` | `7c7f1b78` | `or r31,r3,r3` |
+| `0x0274c01c` | `819f0014` | `stw r0,0x14(r1)` |
+| `0x0274c020` | `819f0024` | `lwz r12,0x24(r31)` -- loop: the vtable |
+| `0x0274c024` | `800c00cc` | `lwz r0,0xcc(r12)` -- the frame |
+| `0x0274c028` | `7c0903a6` | `mtspr CTR,r0` |
+| `0x0274c02c` | `7fe3fb78` | `or r3,r31,r31` |
+| `0x0274c030` | `4e800421` | `bctrl` |
+| `0x0274c034` | `4bffffec` | `b 0x0274c020` |
+
+Two consequences. The frame is reached through an **indirect** branch, so anything executable
+can stand in for it without a branch's 32 MiB reach being a limit -- and the title keeps the
+frame pointer in the vtable rather than in the loop, so a stand-in that re-reads
+`lwz r0,0xcc(r12)` follows whichever display class the title actually installed. There are two
+such classes: the vtable at `0x10004e88` (slot `0xdc` is `0x02034ffc`, slot `0xec` is
+`0x020350c4`) and a second at `0x10145000` (same slots `0xc4`/`0xcc`, but `0xdc` is
+`0x0274c7e4` and `0xec` is `0x0274c8c4`).
+
+And the swap interval is not a constant: the one call, `0x0274bafc` to the `gx2` import
+`0x028fad2c`, passes `display+0x50` -- `lwz r3,0x50(r26)` at `0x0274baf8` -- and that is the
+same field `0x0274c874` tests to decide whether to wait for the flip at all. So the field
+both sets the interval and enables the wait, and the title sets it to 2.
+
+**A stand-in for the frame, in eleven words, all of them the title's own.** Writing this into
+executable guest memory and pointing the vtable's slot `0xcc` at it makes the display thread
+paint each tick's tree twice and present both, with the frame still read from the title's
+vtable at run time:
+
+```
+819f0024  lwz  r12,0x24(r31)      819f0024  lwz  r12,0x24(r31)
+800c00cc  lwz  r0,0xcc(r12)       800c00cc  lwz  r0,0xcc(r12)
+7c0903a6  mtctr r0                7c0903a6  mtctr r0
+7fe3fb78  or   r3,r31,r31         7fe3fb78  or   r3,r31,r31
+4e800421  bctr                    4e800421  bctr
+                                  4e800020  blr        <- from 0x025f0950
+```
+
+Every word is lifted verbatim from the addresses above, so nothing here is hand-assembled and
+nothing rests on a displacement field worked out by hand. `r31` is already the display
+(0x0274c018) and is callee-saved across the frame, so the first paint is handed the same
+argument the original call was. 44 bytes.
+
+Two things about where it returns, both measured rather than read. It cannot return with
+`blr`, because the game's `bctrl` is the only thing that set the link register and a stand-in
+that also calls the title's own `GX2SetSwapInterval` overwrites it -- the `blr` then lands
+inside the stand-in and repaints for ever. And it must return to the loop at `0x0274c020`, not
+to the thread's entry at `0x0274c00c`: the entry is a prologue that opens a fresh stack frame
+and takes the display pointer from `r3`, so returning there re-frames the stack once per paint
+and loses the display. A stand-in that returned to the entry ran seven seconds and then faulted
+at `0x0274c020` with `r31` zero -- `lwz r12,0x24(r31)` on no display -- which the emulator's
+crash dump reported as the active instruction and the register, and nothing in the stand-in's
+own source did.
+
+**What this does not yet establish.** Whether the second paint draws the same image is a
+question about the game's own state, and the loop above is where the risk is: the frame
+function ends with `if (display+0x74 & 1) display+0x74 ^= 2` and skips the flip when both bit 0
+and bit 1 of that field are set, so painting twice per tick may leave every second paint
+without a flip. That field's value in the steady state is not read yet, and neither is
+`display+0x28`. Both are readable at run time from the display pointer, which a probe on
+`0x0274c264` already receives in `r3` on every paint.
+
 ## Limits of what has been measured
 
 **The camera finding rests on four consecutive frames** captured at frame 300 of an
@@ -286,3 +432,30 @@ an unknown slot rather than assume the list is exhaustive.
 **Which renderer served either run is not established.** An earlier note here claimed the
 software rasteriser; that was never measured and the one probe since points the other
 way, so nothing in this document should be read as depending on it.
+
+### What the first measured run of the mod said
+
+Measured 2026-09-26 on the real title, headless and offscreen on the RX 6700 XT, from a
+save that reaches Outset Island, with the runtime's own caller census on `fapGm_Execute`
+(`0x025d42ec`) so the logic's rate is counted at the function that runs the tick rather
+than at a frame counter the flip also moves. One window, six seconds, 180 of each:
+
+| | paints | logic ticks |
+|---|---|---|
+| the title as shipped | 180 in 6.0 s = **30.00/s** | 180 in 6.0 s = **30.00/s** |
+
+So the two rates are equal before anything is changed, which is the denominator every later
+number is read against: the display thread paints once per tick and the logic ticks once per
+paint.
+
+The display object's own fields, read through the probe that sees it in `r3` on every paint:
+`display+0x28` phase 2, `display+0x50` interval 2, `display+0x74` flags **0**, `display+0x78`
+0. The flags matter: the frame function ends with `if (display+0x74 & 1) display+0x74 ^= 2`
+and skips the flip when both bits are set, so painting twice a tick was expected to leave every
+second paint without a flip. With bit 0 clear the toggle is never taken, so that risk is not
+real for this title -- read, not assumed. `+0x78` did not advance over the window, so whatever
+counts frames there is not the counter this mod reports its own rate from.
+
+The stand-in's block came from the loader's trampoline area at `0x00e07068`, which is inside
+the recompiler's executable area (`PPC_REC_CODE_AREA_END` is `0x10000000`), so the payload is
+compiled like the rest of the title's code rather than interpreted around.
