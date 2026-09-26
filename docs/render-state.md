@@ -373,10 +373,30 @@ once per object per pass -- not the node draw, and certainly not the 110 call si
 uniform blocks across the shader families. A stand-in for `0x027ff88c` would see, for every
 object the title draws, which block it is about to bind and how big it is.
 
-Still not known, and it decides whether the blend is one hook or several: **whether tick N-1's
-block contents are still there when tick N paints.** The descriptor list is counted at `+0x4c`
-and nothing read yet says whether the title keeps two of everything. That is the next step, and
-it is a read of who fills that list, not a measurement.
+### The game keeps two of them, and says so in its own constructor
+
+The sub-object that owns the descriptor list is built by `FUN_027fb40c`, and the two lines that
+matter are these:
+
+```
+FUN_028effd0(param_1 + 0x10, 2, 0x1c, FUN_027beb5c);   /* two entries, 0x1c bytes each */
+*(undefined4 *)(param_1 + 0x4c) = 1;                    /* and the count starts at one   */
+```
+
+**Two slots, and a count that starts at one.** The binder reads
+`param_1 + 0x10 + *(int *)(param_1 + 0x4c) * 0x1c` -- entry *number count*, one past the last
+one counted -- so the count is a cursor over a two-entry ring rather than a length, and the entry
+being bound is the one at the cursor. That is the title's own double buffering of a per-object
+uniform block, in the title's own code, and it is the same double buffering the host-side
+mechanism had inferred statistically from block addresses recurring at one frame parity.
+
+What is *not* yet read: whether the two slots are two frames or two passes. A search for the
+code that advances `+0x4c` returns eleven candidate functions and `0x4c` is a common enough
+offset to be none of them by itself, so the next step is a narrow one -- follow the writer of
+the entry at the cursor, `FUN_027beb5c`'s callers -- rather than another guess. Until that is
+read, the honest statement is that the game has room for two block sets per object and reads
+whichever its cursor names, which is what a blend needs, and not yet that the cursor is known to
+alternate per frame.
 
 **The game names its own view uniforms.** Its rodata carries `cWorldViewMatrix[0]` at
 `0x10163bb4` and `cWorldViewProjectionMatrix[0]` at `0x10163d00`, beside `uBlurOffset`,
