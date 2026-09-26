@@ -534,6 +534,23 @@ second paint without a flip. With bit 0 clear the toggle is never taken, so that
 real for this title -- read, not assumed. `+0x78` did not advance over the window, so whatever
 counts frames there is not the counter this mod reports its own rate from.
 
-The stand-in's block came from the loader's trampoline area at `0x00e07068`, which is inside
-the recompiler's executable area (`PPC_REC_CODE_AREA_END` is `0x10000000`), so the payload is
-compiled like the rest of the title's code rather than interpreted around.
+The stand-in's block comes from the loader's trampoline area, at `0x00e05850` when it is
+reserved at link time and `0x00e07068` when it is reserved later, which is inside the
+recompiler's executable area (`PPC_REC_CODE_AREA_END` is `0x10000000`) and is the same arena the
+caller-census probe stubs live in.
+
+Being inside that area turned out not to be sufficient, and the way it was not sufficient is
+worth more than the number. A stand-in whose body is the display loop's own five instructions,
+reached through the display vtable exactly as the title reaches its own draw, froze the whole
+emulated system for precisely as long as it was installed: no paints, no logic ticks, nothing
+logged, and 30 a second the moment it was taken out again. The same block, the same words, the
+same single word of vtable rewritten, reached by a plain branch instead of through the count
+register, runs the title at 30.00 paints and 30.00 logic ticks a second with the stand-in in
+place. `mtctr`/`bctr` against `b` is the whole difference, and it is the recompiler's jump
+table: a direct branch translates at the address it lands on, an indirect one looks its target
+up there, and a block allocated out of the trampoline arena had never been registered. The
+runtime registers it now.
+
+For the title this changes nothing about what may be patched -- a slot of a vtable the display
+already calls, with the frame re-read from the title's own vtable on every pass -- and it is
+worth stating that the constraint it does impose is the emulator's, not the game's.
