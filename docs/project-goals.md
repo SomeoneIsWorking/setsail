@@ -3,6 +3,14 @@
 Wind Waker HD on Linux desktop, presenting at 60 Hz by interpolating the game's own
 render state. Epic intent only; capability status lives in `docs/project-state.md`.
 
+**Where this title's half of the work lives.** The addresses, the stand-in's words, the
+blend policy and the evidence are this project's, in `docs/render-state.md`. The runtime it
+launches owns only the title-neutral capabilities those need -- writing the guest's own
+memory, and the emulator's flip pacing -- and says what each one is. That split is a
+statement of fact about where the code is today, not a claim that the boundaries are
+finished: `setsail` has no C++ build of its own, so the title's module currently compiles
+inside the runtime it provisions. The intent is that it does not.
+
 Active title: **The Legend of Zelda: The Wind Waker HD (USA) (En,Fr,Es)**, supplied by
 the player as a WUX disc image. The title is the single conformance target.
 
@@ -26,9 +34,11 @@ player's. They never enter the repository, CI, a commit, a package, or a hosted 
 ## GOAL-60 — True 60 Hz presentation by interpolating recovered render state
 
 **Outcome.** Wind Waker HD simulates at its own 30 Hz and presents at 60 Hz. The extra
-frames are real rendered frames: the runtime replays the frame's draw stream with camera
-and actor transforms blended between the previous and current simulation tick. Geometry,
-topology, UVs, depth, and materials come from the game's own submitted state.
+frames are real rendered frames, drawn by the title's own render path with the pose blended
+between the previous and current simulation tick. Geometry, topology, UVs, depth,
+skinning and materials are the title's own: it draws the blended frame itself, at a pose
+the blend put in the uniform block the title's own binder is about to bind. The simulation
+rate is untouched -- the picture's rate comes from the flip.
 
 **Why.** The simulation is 30 Hz-locked; there is no working community 60 fps pack for
 this title precisely because raising the tick rate breaks it. Interpolating the
@@ -36,17 +46,16 @@ transforms the game already submits raises presentation rate without touching
 simulation semantics.
 
 **Success conditions.**
-- The camera transform source is identified in the guest's submitted render state, with
-  evidence tying the recovered slot to observed camera motion — not inferred from pixels.
-- Actor/object transforms are identified and blended per object, with stable identity
-  across ticks so an object is never blended against a different object's state.
-- A held-still scene produces an interpolated frame that draws exactly what the title drew,
-  every substituted value bit-equal to its neighbours', and so no further from them than
-  the renderer's own replay of that frame is from itself.
-- A moving scene shows the interpolated frame strictly between its neighbours, verified
-  by code against the two source transforms, not by eye.
-- Objects whose transform cannot be matched across ticks are presented un-blended rather
-  than blended against the wrong state, and are counted.
+- The pose is located in the title's own state, with the addresses it was read from, and
+  not inferred from pixels or from a statistical search for something that moves.
+- Each object's identity is the title's own -- the node whose draw binds the block -- so
+  an object is never blended against a different object's state.
+- The previous tick's block is still present when this tick paints, measured rather than
+  assumed, since that is what a blend of the two needs.
+- The title presents at 60 Hz with its logic rate unchanged, both measured on the real
+  title in a headless run with denominators.
+- The null case is measured too: two paints with no substitution are byte-identical, and
+  the blended paint differs from both, nearer each than they are to each other.
 
 **Constraints.** Deterministic and source-state-driven. No image-space motion
 estimation, no reading back rendered pixels to decide geometry, no content-dependent
