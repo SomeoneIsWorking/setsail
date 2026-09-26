@@ -396,26 +396,45 @@ being bound is the one at the cursor. That is the title's own double buffering o
 uniform block, in the title's own code, and it is the same double buffering the host-side
 mechanism had inferred statistically from block addresses recurring at one frame parity.
 
-What is *not* yet read: whether the two slots are two frames or two passes. A text search for
-the code that advances `+0x4c` returns 1797 functions, because `0x4c` is a common offset, so
-that search cannot decide anything and the narrow route is the object's own method table. Read:
-the vtable the sub-object's constructor installs at `+0xc` is `0x1016ef24`, and none of its
-methods touches `+0x4c`. What they are is instructive -- `0x027fb528` and `0x027ff838` are its
-reset and destructor, `0x027fb6a0` declares attribute layout, `0x027fb780` resets eight blocks
-of attribute defaults, and `0x027fb880` fills three attribute streams from a source. Not one of
-them writes a uniform block.
+The vtable the sub-object's constructor installs at `+0xc` is `0x1016ef24`, and none
+of its methods touches `+0x4c`. What they are is instructive -- `0x027fb528` and
+`0x027ff838` are its reset and destructor, `0x027fb6a0` declares attribute layout,
+`0x027fb780` resets eight blocks of attribute defaults, and `0x027fb880` fills three
+attribute streams from a source. Not one of them writes a uniform block.
 
-**So the block is written outside the object, before the object is drawn.** The list is prepared
-per frame, and the object's own method is only handed the finished thing to bind. That has a
-consequence for the blend, and it is the useful one: there are two distinct moments, not one.
-The *values* exist at fill time, on the logic thread, before any draw; the *identity and the
-address* are known at bind time, on the display thread, per object per pass. A blend therefore
-has to capture at fill and write at bind -- or write at fill, using the other of the two slots.
-Either way it is a pair of hooks in the game's own code and neither of them is the 110 call
-sites.
+**So the block is written outside the object, before the object is drawn.** The list
+is prepared per frame, and the object's own method is only handed the finished thing
+to bind. That has a consequence for the blend, and it is the useful one: there are
+two distinct moments, not one. The *values* exist at fill time, on the logic thread,
+before any draw; the *identity and the address* are known at bind time, on the
+display thread, per object per pass. A blend therefore has to capture at fill and
+write at bind -- or write at fill, using the other of the two slots. Either way it is
+a pair of hooks in the game's own code and neither of them is the 110 call sites.
 
-Still open, and the next single read: who fills the entry at the cursor. Not one of the
-candidates so far is it -- a search by offset cannot be, and the object is not where it is.
+What is *not* established by reading the code: whether the two slots are two frames
+or two passes. A text search for the code that advances `+0x4c` returns 1797
+functions, because `0x4c` is a common offset, so that search cannot decide anything.
+Narrowed to the module that builds the list -- `0x027f0000`-`0x02810000`, which holds
+the constructor, both binders and the entry initialiser -- it returns **thirteen**
+functions that store to `+0x4c`, and *none of them turns the cursor*: two set it to
+one, two set it to zero, one copies it from `+0x48`, and the rest store through a
+different base register, which makes them a different class's field that happens to
+sit at 0x4c. The one that copies from `+0x48` is `FUN_027fb678`, and it is not this
+list: it computes `countLeadingZeros` and walks a linked list at `+0x54`, which is a
+tree node, not a descriptor ring.
+
+So the code does not say, and the honest position is that the answer is a
+measurement: the census now reads **both** slots on every binding and counts how
+often the cursor moved between consecutive bindings of the same object, against the
+number of bindings that could have been a switch at all. Near one switch per bind
+and the two slots are two passes; near zero and the choice is not per bind. A title
+that drew each object once would report no switches for a ring that works, which is
+why the compared count is reported beside the switch count rather than the switches
+alone.
+
+Still open, and the next single read: who fills the entry at the cursor. Not one of
+the candidates so far is it -- a search by offset cannot be, and the object is not
+where it is.
 
 **The game names its own view uniforms.** Its rodata carries `cWorldViewMatrix[0]` at
 `0x10163bb4` and `cWorldViewProjectionMatrix[0]` at `0x10163d00`, beside `uBlurOffset`,
