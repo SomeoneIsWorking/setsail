@@ -333,10 +333,16 @@ not what the section above guessed.
 The node object is built by `FUN_0215d9d4`, which allocates 0x264c bytes and sets, in order:
 its vtable at `+0xc` to `0x1001061c`; two sub-objects at `+0xa1c` and `+0xac4`, with vtables at
 `+0xa28` (`0x1016ef84`) and `+0xad0` (`0x1016efb4`); a four-slot pool of 0x254-byte draw
-records at `+0xa8`; and a 0x2f0-byte block at `+0xb38`. The base class's slot `+0xc` is
-`0x02160018` -- the draw this document found earlier through the derived vtable at `0x10036300`,
-which turns out not to override it, so the two are the same function and the derived class is
-one of several that share it.
+records at `+0xa8`; and a 0x2f0-byte block at `+0xb38`.
+
+Which class draws it, and through which slot, took a second read to get right. The tree walk's
+leaf, `0x02747bdc`, calls slot `+0xc` of the vtable at `node+0x2c` when `node+0x44` bit 0 is
+clear, and recurses into `node+4`'s list when bit 1 is clear. The class the tree actually holds
+is the derived one at `0x10036300`, whose slot `+0xc` is `0x02160018`; the descriptor the
+constructor installs, `0x1001061c`, has `0x02161028` in that slot, and `0x02161028` is a *reset* --
+it clears two 0x4a8-byte records and re-stores the descriptor at `+0xc`. So `0x1001061c` is the
+base class's descriptor and `0x10036300` is the class that draws, and they are not two names for
+one slot. An earlier reading of this section had it the other way round.
 
 `0x02160018` walks the node's own draw records: the array at `+0xa4` with a count at `+0xa0`,
 five or six words each, and `param_2+0xc` selects which of three sub-passes is being drawn. A
