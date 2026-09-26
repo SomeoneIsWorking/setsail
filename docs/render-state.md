@@ -557,6 +557,12 @@ table: a direct branch translates at the address it lands on, an indirect one lo
 up there, and a block allocated out of the trampoline arena had never been registered. The
 runtime registers it now.
 
-For the title this changes nothing about what may be patched -- a slot of a vtable the display
-already calls, with the frame re-read from the title's own vtable on every pass -- and it is
-worth stating that the constraint it does impose is the emulator's, not the game's.
+The stand-in that works is therefore the one that does *not* re-read the frame: it branches
+straight at the frame the vtable slot held when it was installed, and the install check refuses
+by name over a slot that does not hold this title's frame. The cost is exact and worth stating
+-- a title that swapped that slot at runtime would keep painting the frame that was verified --
+and the benefit is the whole mechanism, since the re-reading form does not run at all.
+
+For the title this changes nothing about what may be patched: a slot of the vtable the display
+already calls, and the frame function it already points at. The constraint the indirect call
+imposed is the emulator's, not the game's.
