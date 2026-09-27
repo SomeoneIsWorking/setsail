@@ -3,11 +3,15 @@
 Factual capability inventory for Wind Waker HD on Linux. Epic intent is in
 `docs/project-goals.md`. Every item is `verified`, `partial`, `blocked`, or `missing`.
 
-**Current focus.** ST-PAINT -- the guest paint path that would replace the statistical lerp. Two
-prerequisites are open and neither is a task yet: **why the recompiler declines the second paint pass**
-(the fault arrives through `PPCInterpreterSlim_executeInstruction`, its fallback), and **whether the
-running guest's memory is the disc image's memory at all**, which every disassembly-derived claim about
-the running title depends on. The evidence is in `docs/render-state.md`; the mechanism and the
+**Current focus.** ST-PAINT -- the guest paint path that would replace the statistical lerp. One
+question is open and it is the whole of what is left: **the faulting instruction of the second paint
+pass belongs to a module this project has not analysed.** It arrives through
+`PPCInterpreterSlim_executeInstruction`, the recompiler's fallback, on the display fiber, with the
+program counter in the loader's arena and the link register inside the stand-in's block; decoded with
+the byte order right it is `lwarx r16,r6,r0`, a load-and-reserve, and it is not in this title's RPX
+(0 matches over 9,432,460 executable bytes against a control found 4,893 times). So the next step is
+identifying the module that arena address belongs to, which is a question about cemu's loader rather
+than about the title's draw path. The evidence is in `docs/render-state.md`; the mechanism and the
 instruments are in `wiiuport` `docs/frame-interpolation.md`. Second: ST-60 -- the objects three frames
 cannot verify, and the uneven halves of a tick (ST-PERF). The work is in `wiiuport`; this inventory
 points at its evidence.
