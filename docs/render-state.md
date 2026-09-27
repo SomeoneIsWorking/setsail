@@ -1229,10 +1229,32 @@ negative result, and it is now negative for a known reason rather than for a sus
 
 **What this reopens.** The objective's first question -- which node field holds the pose -- was
 answered "none" partly on the strength of those two scans. That answer does not stand, and the
-search for the pose has to start again from a real uniform block. The next read is bounded: the
-title's own write is visible in the register the binder fills, as word 0 `0x40` and **word 1
-`0x3f`** at `mmSQ_VTX_UNIFORM_BLOCK_START + index * 7`, so reading the uniform-block register
-bank and keeping the slots whose size word is `0x3f` names the banks the title actually filled --
-the size word is the discriminator because it is a small constant the title wrote, where word 0 is
-whatever the register held before. That needs one seam, beside `LatteFrameHooks::UniformAssembly`,
-which today carries the address the *shader* names and not the one the *binder* wrote.
+o start again from a real uniform block. The pool is real, and the title names its block by a
+register index.
+
+**The size word tells the guest's writes from register leftovers.** Word 1 of a uniform block
+register is `size - 1` as the guest wrote it, and a size the guest chose is a small constant that
+register state does not invent -- so it can say a slot the title filled from one it did not, where
+word 0 alone cannot, since the guest indexes these registers by the index it passes to
+`GX2Set*UniformBlock` and the shader names them by its own group. The fork now hands both words
+over (`LatteFrameHooks::UniformAssembly::blockSizes`). With the record's own size word as the
+filter and nothing guessed:
+
+```
+expected size 64 bytes, 3,990,665 size words read, 1,000,430 slots holding size-1
+  0x4581c200: 17,806   0x4581c300: 17,045   0x45436700: 14,939
+  0x45436300: 10,930   0x45978b00: 10,496   0x3e634300:  4,145
+```
+
+**0x100-strided** -- `0x4581c200` to `0x4581c300` is 0x100, `0x45436300` to `0x45436700` is 0x400
+-- which is a pool of 64-byte blocks, and `0x3e634300` is in it. That is the value an earlier
+comment in wiiuport's log dismissed as "a pointer, not a length". It was a block address; what it
+was not was reachable by the route being tried at the time.
+
+**The join is the index, and it is in the binder's own `r4`.** The decompilation puts the block
+index outside the record: `*(short *)(iVar3 + 0xc)` with
+`iVar3 = *(int *)(param_2 + 0x10) + 0x28`, and `param_2` is `r4` at the probe. So the title names
+its block by a *register index*, read from a structure the census does not yet read, and the
+block's bytes are in the slot that index addresses. r3 gives the object, r4 gives the indices, and
+`contextRegister[mmSQ_VTX_UNIFORM_BLOCK_START + index * 7]` word 0 gives the address. No base, no
+offset, and nothing matched host-side.
