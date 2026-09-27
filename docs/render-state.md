@@ -1549,3 +1549,57 @@ display's state -- and it makes the display object being cleared a consequence o
 having been entered rather than a cause. Which branch goes there is still unknown; the candidates are
 the stand-in's control flow after the frame returns, or one of the frame's five `bctrl`s, whose targets
 come from `display+0x24` and are measured identical across paints.
+
+## The paint payloads were branching into a zero-filled hole, and the fault has moved three times
+
+Read live at the fault, in one pass from one register so that nothing had to be paired up afterwards:
+
+```
+program counter  0x0e001128
+link register    0x00e058a0        the stand-in's own block (0x00e05898) plus 8
+the opcode in ESI 0x800006e2       rA = 0, displacement 0x6e2
+the effective address, in RCX: 0x000006e2
+r0 = 0x00e05898   r11 = r12 = 0x10004e88   r31 = 0x43e08af8
+```
+
+**The link register is the stand-in's own, and its only branch before the frame is the swap-interval
+call -- and that address is not code in this title's image:**
+
+```
+0x028fad2c  0x00000000   add r0,r0,r0
+0x028fad30  0x00000000   add r0,r0,r0
+0x028fad34  0x00000000   add r0,r0,r0
+0x028fad38  0x00000000   add r0,r0,r0
+```
+
+Ghidra holds a function symbol at `0x028fad2c` and no instruction at all, which is a zero-filled hole
+rather than a body it failed to disassemble. A `bl` into it runs four no-ops and then whatever follows
+at `0x028fad3c` -- which is how a guest that was painting twice ended up executing host pointer bytes
+in the loader's arena: `0x0e001128` read little-endian is the host pointer `0x7ffee2e2060080`.
+
+**Fixed by deletion.** Nothing branches there any more; the interval is set by writing the display's
+own `+0x50` field, which is the shape that measures 59.99 and 60.12 paints a second and survives. The
+call was redundant before it was fatal. This project is what the title's image says on the subject, and
+it says the address is a hole.
+
+**The fault persists and its signature changed**, which is the evidence that the hole was a contributor
+and not the whole cause. Before: a segfault inside the *interpreter's* guest load, program counter in
+the arena. After:
+
+```
+rip  0x7ffe79a19f30   movbe 0x48(%r13,%rax,1),%ecx   with r13 = memory_base, rax = 0
+OSSched[core=1]  via recompiled  guest pc=0x00e05884  lr=0x0274c280
+  r0..r7 = 00e058a0 0e275a38 10008000 00000000 0e275a24 0e275a28 0e275a30 44213980
+```
+
+**The guest is inside a probe's dispatch stub.** The program counter is in the arena twenty bytes below
+the stand-in's own block, and the arena is where the probe stubs live -- one was read at `0x00e058b4`
+holding the HLE `bl`, the displaced word and the resume. The link register is `0x0274c280`, **the
+display frame's own seventh word**, so the frame ran, it called a probe, and the guest is in that
+probe's stub.
+
+**So the fault has moved three times and each move narrowed it**: from the title's draw path, to the
+loader arena, to a probe's dispatch stub. None of the three is the title's paint path, and the last is
+not the paint mod's payload either -- it is the probe machinery installed on the frame. Nothing about
+this title's own drawing is established to be at fault, and nothing about the pose or the uniform-block
+ring is blocked by it.
