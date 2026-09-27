@@ -488,15 +488,31 @@ cursor turns -- 0.297 switches a binding, measured -- but a slot the title has n
 written reads as zeros, so *the cursor turning is not the same thing as the previous
 tick's values being in memory*. Counting non-zero words settles it: across four
 objects the two slots read 19 and 52 non-zero words of 64, the same for every
-object, and **unchanged while the camera turned** (`rightx=0.5`, then `-0.4`) --
-zero of 64 words differing in the bound slot before and after. A per-tick pose would
-have moved when the camera moved.
+object.
 
 So the two readings are different findings and the earlier one was the wrong one. The
-ring turns; what the two slots hold at the moment of a bind is one transform and
-one unwritten block. Whether a blend can read two ticks' poses from this pair is not
-established, and the measurement that would settle it is a read of the same offsets
-at two different *times* on the same object -- which is what this next read is.
+ring turns; what the two slots hold at the moment of a bind is one transform and one
+unwritten block.
+
+**Withdrawing a claim made in the course of finding this.** A first reading of the
+same dumps said the pose was "unchanged while the camera turned" and called that
+evidence it was not a per-tick pose. **The camera did not turn.** The turn went in as
+`POST /input?rightx=0.5&reads=60` and the title's own `cWorldViewMatrix[0]` at
+`0x10163bb4` read the same 16 floats before and after -- 0 of 16 changed. The pose
+not moving across a camera turn that did not happen says nothing at all, and the
+inference drawn from it is withdrawn. It was caught by checking the input against
+the title's own view matrix rather than against a count, which is the only reason
+it was caught at all; the measurement is now written to refuse to report a pose
+result when the view matrix has not moved.
+
+What *is* measured about the pose over time: with the title still, 0 of 16 blocks
+changed over 1.2 seconds. That is the expected result for a pose the title writes
+only when something moves, and it is equally the result for a pose nobody writes,
+so it does not distinguish them. Whether the pose at `+0xc4` is per-tick is **not
+established**, and the read that would settle it is the same one: a camera turn
+verified against `cWorldViewMatrix[0]`, then the pose read before and after. Turning
+the camera through the control channel at all is the step in front of that, and it
+is not yet done.
 
 **The game names its own view uniforms.** Its rodata carries `cWorldViewMatrix[0]` at
 `0x10163bb4` and `cWorldViewProjectionMatrix[0]` at `0x10163d00`, beside `uBlurOffset`,
