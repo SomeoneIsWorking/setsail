@@ -1054,3 +1054,45 @@ ceiling, the unreadable components are counted, and a believable movement is sep
 unreadable bytes -- 40 differing bytes with a largest component delta of **0.488** is a
 half-unit of travel, and it is now reported as such beside the 18 components that were not
 readable.
+
+
+## The falsifier's answer, spread across the run
+
+Sampling the *first* eight objects gave "6 of 8 identical" -- which for a wind game's opening
+frame is plausibly a sea, a sky and a particle system, and is a statement about those eight
+rather than about the title. The sample is strided now: an object is tracked only when it is the
+first of its own 4096th arrival, so the eight tracked spread across the whole run, at frames
+109, 132, 159, 180, 204, 225, 253 and 293.
+
+**The answer changes with the sample.** 500,896 draws seen, 8 tracked, 47 refused by the set
+bound:
+
+    3 blendable, 1 identical, 1 valueUnchanged, 3 with nothing paired
+
+    1166878616: blendable,       4 vertices, stride 20, 38 differing bytes, delta 0.106766738
+    1216241436: blendable,       4 vertices, stride 20, 42 differing bytes, delta 209089
+    1160909272: blendable,       4 vertices, stride 20, 40 differing bytes, delta 883540
+    1046048488: valueUnchanged, 10 vertices, stride 152, 80 differing bytes, delta 9.1e-07
+    1160952552: identical,       3 vertices, stride 32, 0 differing bytes, delta 0
+
+**A largest component delta of 0.107 is a tenth of a unit of travel, which is what a position
+does.** So there is something real, and a sea and a sky not moving is why the first sample found
+none of it.
+
+**The layouts account for every unreadable magnitude, and show where the census is still wrong:**
+
+    stride 20: 7 objects, semantic 0, 12 bytes, offset  0
+    stride 28: 1 object,  no position named
+    stride 32: 7 objects, semantic 0, 12 bytes, offset  0
+    stride 48: 3 objects, semantic 0, 12 bytes, offset 16
+    stride 64: 7 objects, semantic 0, 12 bytes, offset 16
+
+The position is at offset 0 in two layouts and offset 16 in two others, so the single global
+offset the census named first was right for half the title and nonsense for the rest.
+
+And the stride-20 layout is the one still unsolved: four vertices at a 20-byte stride with a
+12-byte position at offset 0 leaves 8 bytes of something else in the stride, and those are read
+as floats. But a *believable* 0.107 on the same twelve bytes is impossible if all three
+components were wrong -- so those twelve bytes are partly position and partly not, and a bar over
+how many objects agree on a signature is not enough to tell that. The next bar is a magnitude
+condition rather than a count.
