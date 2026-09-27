@@ -551,6 +551,36 @@ emulator already keeps.
 **This document's earlier reading is corrected by it.** The claim that "a blend cannot read N-1
 out of the ring" was true of the ring and irrelevant: the ring's 64-byte blocks are not where the
 pose is, so the ring was never the place N-1 would have come from.
+
+**And it is not in the assembled uniform buffers either — so it is a node field.** The emulator
+hands over every uniform buffer the game assembles for a draw, with the guest blocks it sourced
+and the display list it belongs to. Every 4-aligned offset of every one of them was tested for a
+rigid 3x4, with the counts kept:
+
+```
+window 0:  614,690 assemblies,  2 candidate offsets,  0 believed at 20%,  best offset null
+           371,528 of them had no block sources at all
+window 1:  756,350 assemblies,  2 candidate offsets,  0 believed at 20%,  best offset null
+           456,968 of them had no block sources at all
+```
+
+No offset cleared the bar, and the two candidates are coincidences a colour triple or three
+equal rows would produce. Three fifths of the draws source no uniform blocks at all.
+
+That agrees with the 64-byte finding and explains it. **The title positions geometry on the CPU
+each frame** — the shipped mechanism's own evidence in this project says so, and says why it had
+to keep vertex bytes and blend them — so the pose is in the vertex data, not in a uniform, and
+the transform that puts it there is the node's own, applied before the display list is built.
+
+**So the chain in the objectives' framing is right read literally — "which *node field* holds the
+pose" — and this document went looking in uniform blocks** because the binder names one and
+because the block census was the instrument to hand. Two measurements in a row now say the
+block is the wrong place. The next read is the same shape test applied to guest memory: at the
+node's own draw, `FUN_02160018` with the node in `r3`, scan the node for a rigid 3x4 at every
+4-aligned offset, with the same counted bar. Lerping *that* field and letting the game's own
+draw run is what regenerates the skinning, the attributes and the display list at the lerped
+pose — with no host-side vertex work at all, which is why `VertexBlend` guessing which vertex
+buffers belonged to one object is a consequence of not knowing this and not a preference.
 The original dump:
 Dumped from the title while it ran, one slot against the other, 256 bytes each:
 
