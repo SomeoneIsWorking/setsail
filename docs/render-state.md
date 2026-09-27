@@ -1417,3 +1417,81 @@ load address at run time; or the mod reports host-side addresses where the guest
 **Until that is settled, no disassembly-derived claim about the running title is established** --
 including the `display+0x18` correction, which is a correction to the analysed listing. This is the
 first prerequisite for the paint path, and it is now the project's open question.
+
+## The guest is the disc image: the debugger was reading it backwards
+
+The section above said the running guest's memory did not match the disc image's, and listed that as
+the project's open question. **Both halves of that are withdrawn. The image is the guest, and the
+debugger was reversing every word it printed.**
+
+The product's own accessor settles it, and it is a read that refuses by reason rather than one that
+returns whatever the host had there -- `GET /memory` goes through the fork's
+`GuestCallProbes::GuestBytes`, which returns null unless every byte of the range is mapped guest
+memory:
+
+```
+  the display frame, guest 0x0274c264, as the product reads it
+    4a6b961c 9421ffe8 93c10010 93e10014 9001001c 7c7e1b78 4bffedd9 807e0018
+  the display frame, guest 0x0274c264, as gdb's x/8wx read it
+    1c966b4a e8ff2194 1000c193 1400e193 1c000190 781b7e7c d9edff4b 18007e80
+  every one of the eight byte-reversed: True
+```
+
+Eight words, eight reversals, one of them the frame's own `or r3,r30,r3` -- no coincidence produces
+that. **gdb reverses every word it prints for big-endian guest memory**, so every guest word read
+through it in this project was byte-swapped.
+
+**The one word that genuinely differs is the paint mod's own probe, and it is a branch because that is
+what a probe is.** `GuestCallProbes::Install` writes a relative branch over the probe's entry and
+keeps the image's word inside its stub, and the arena shows that stub's own layout: `040004e4` (the
+HLE `bl`), `7c0802a6` (the displaced `mfspr r0`), `3d80027f 618cf890` (the resume address),
+`7d8903a6` (`mtctr r12`).
+
+**The vtable slot, read by the product, agrees with the objective's arithmetic:**
+
+```
+  guest 0x10004f4c:  0274c00c 00000000 0274c264 00000000 0274c67c 00000000
+                     vtable+0xc4  vtable+0xcc = the frame   vtable+0xd4
+```
+
+`0x10004e88 + 0xcc = 0x10004f54` holds `0x0274c264`. The mod refuses to install unless that slot holds
+the display frame, so **the mod working is itself the evidence that the guest is the image** -- the
+check that had looked like a contradiction was the check that proves it.
+
+## The frame's display fields, measured rather than quoted from its prologue
+
+The frame's first eight words were read directly and showed its first load at `display+0x18`, which
+briefly looked like a correction to the `*(display+0x24)` the call targets come from. It is not.
+All 85 instructions of the frame, with `r30` holding the display from its sixth word to its exit:
+
+```
+  READ off r30:    +0x18 once (0x0274c280), +0x24 five times (0x0274c288),
+                   +0x28 (0x0274c35c), +0x4c twice, +0x74 twice (0x0274c2c4)
+  WRITTEN via r30: +0x28, +0x74 (0x0274c38c), +0x78, +0x7c, +0x80, +0x84
+  loads off r10/r11/r12: +0xd4, +0xdc, +0x6c, +0xec, +0xe4 -- the five call targets
+```
+
+`+0x18` is read once into `r3` early; `+0x24` is read five times, and every one of the five call
+targets is loaded through a register the `+0x24` chain supplies. **The paint mod's offsets are
+confirmed against the image**: its call-target base of `display+0x24` and its five offsets
+`{0x6c, 0xd4, 0xdc, 0xec, 0xe4}` are exactly the frame's own access pattern. The objective's two
+named fields are confirmed too -- `+0x74` read twice and written once at `0x0274c38c`, which is the
+documented `stw r0,0x74(r30)`, and `+0x28` read once and written once.
+
+## The faulting instruction, decoded with the byte order right
+
+With the reversal undone, the opcode the interpreter was executing is `0xe2060380`, which is
+`lwarx r16,r6,r0` -- a load-and-reserve, the shape a lock takes and not the shape a display path
+takes:
+
+```
+scanned 9,432,460 executable bytes in 17 blocks
+  control 0x7c7e1b78 (the frame's own sixth word): 4,893 matches
+  sought  0xe2060380:                                    0 matches
+```
+
+**So the faulting instruction is not in this title's own RPX** -- and unlike the earlier version of
+that claim, this one survives the byte-order fix. What is consistent across every run of the fault:
+the program counter is in the loader's arena at `0x00e000xxx` and the link register is inside the
+stand-in's block. The second paint enters the arena and leaves it executing something outside the
+title's code, and the arena is where the mod's stand-in and its probes live.
