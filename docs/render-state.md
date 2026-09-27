@@ -1775,3 +1775,43 @@ a block full of them says its counts are meaningless rather than becoming a find
 
 What is left is not about where the payload is or what is in it: **the guest reaches an address just
 below this block, with the payload correct above it.**
+
+## Four probe stubs side by side, and the fault is inside the display frame's own
+
+Read beside the arming, over a window around the paint mod's payload, looking for `bctr` -- an exact
+word, so a stub is found by its own last instruction rather than by decoding its first:
+
+```
+0x00e05820  displaced 0x81830140  resume 0x027b5e98
+0x00e05838  displaced 0x9421ffe0  resume 0x027ff1dc
+0x00e05850  displaced 0x9421feb8  resume 0x0216001c
+0x00e05868  displaced 0x7c7e1b78  resume 0x0274c27c   <- or r30,r3,r3
+```
+
+**The fourth is this title's display frame.** Its displaced word is `or r30,r3,r3` -- the frame's sixth
+word, where the paint mod's probe moved when the link-register defect was fixed -- and its resume is
+`0x0274c27c`, the frame's seventh word. **The probe is installed exactly where it was moved to and
+resumes exactly where it should.**
+
+**And the fault's program counter, `0x00e0586c`, is that stub's second word**: the displaced
+instruction, `or r30,r3,r3`, a register move that cannot fault. Reaching it with four words at four-byte
+spacing in the registers and a stack pointer that is not a guest address is the shape of an instruction
+that was never meant to be running. So the guest is inside the frame's own probe, on the frame's own
+displaced word, with the frame's own probe correct in memory -- the narrowest this fault has been, and
+the same place in every run.
+
+## And the probe mechanism was writing code without invalidating it
+
+`GuestCallProbes` wrote its stub and the branch over the probed entry and told the recompiler nothing.
+The loader's trampoline area is registered with the recompiler wholesale, because the loader does put
+real code in it -- so a block covering any address there may already have been translated from whatever
+the loader had written, and writing over that leaves the guest running the old translation.
+
+**Every other guest-code writer in cemu invalidates and this one did not** -- `GuestPatching::WriteBytes`
+for a range that is not fresh, `Debugger` and `GDBBreakpoints` per word, `GraphicPack2PatchesApply` per
+patch, `GuestCallProbes` nowhere. Fixed in the fork, through one `WriteGuestWord` that writes and
+invalidates so nothing written by that file can miss it.
+
+**The fault persists with the fix in, unchanged.** The stale translation was a real defect and not the
+cause -- and it had to be fixed anyway, because leaving it in place makes every subsequent measurement in
+that area a measurement of the loader's bytes rather than of the paint mod's.
