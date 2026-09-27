@@ -1954,3 +1954,57 @@ OSGetSystemTime@028fdf04 size 1
 thread. So `0x025d42ec` is not executed by the running title -- the host probe counted zero calls at
 it over a window in which the title painted 240 times -- and the gate has no site to stand on in this
 path. **The logic tick rate from the title's own tick is `missing`.**
+
+
+## The pose is at offset 60 of the assembled uniform block, in three runs, and the strict test
+## that looked for it could not see it
+
+The title's world matrix is `T * R * S`. A test that asks for three rows of **unit** length finds
+a pose only when nothing is scaled, so it reports "nothing here" identically for a field that is
+absent and for a field that is present and carries scale. The loose class -- a non-singular 3x3 whose
+rows are within a stated ceiling of unit length -- tells those apart, and this title's report has been
+asking it all along:
+
+```
+rigid bar:   4 offsets ever in this class, 0 held often enough, 0 of those seen to move
+affine bar: 92 offsets ever in this class, 11 held often enough, 11 of those seen to move
+  offset 60: 206388 assemblies, 206382 repeat comparisons, 15739 moved, 190643 still
+  offset 52: 191468 assemblies, 186997 repeat comparisons, 15258 moved, 171739 still
+  offset 56: 189108 assemblies, 189102 repeat comparisons, 15502 moved, 173600 still
+  offset 68: 188187 assemblies, 188181 repeat comparisons, 15740 moved, 172441 still
+  offset 36: 186891 assemblies, 160857 repeat comparisons,   852 moved, 160005 still
+  offset  4: 180790 assemblies, 170562 repeat comparisons,   959 moved, 169603 still
+  offset 104:176611 assemblies, 176460 repeat comparisons,  6232 moved, 170228 still
+  offset 92: 174901 assemblies, 173940 repeat comparisons,  6225 moved, 167715 still
+```
+
+**Three runs, and the best offset is 60 in every one of them:**
+
+```
+821216 assemblies,  92 candidates, 11 held often enough, 11 seen to move, best 60
+823431 assemblies,  92 candidates, 11 held often enough, 11 seen to move, best 60
+1198624 assemblies, 92 candidates,  6 held often enough,  6 seen to move, best 60
+```
+
+The count of moving offsets is 11, 11 and 6 and moves with the window; the best offset does not. The
+strict class is 4 offsets ever, 0 held often enough, in all three runs.
+
+**A sentence in the mechanism document was arithmetic, and it was wrong, and it may have ended this
+search early:** "a 64-byte block cannot hold twelve floats". Twelve floats are 48 bytes and 48 ≤ 64,
+and 64 bytes is exactly one 4x4. The other half of that sentence -- no rigid transform in 233
+whole-block scans -- is a measurement and stands; what it showed is that the block holds no
+*unscaled* transform.
+
+**A second predicate was written here first, and it was the wrong move.** A 4x4 test with the basis in
+the rows and in the columns counted separately, on the reasoning that a 64-byte block is exactly one
+4x4. It passed its own tests and it duplicated a rule that already had an owner, and was a different
+rule from the one the census uses -- so two instruments would have disagreed for a reason neither
+could see, both calling it "the affine class". It is deleted. The block scan now asks the same class
+the census asks, over the same twelve-word windows.
+
+**What is still missing is the half that matters for a blend: the identity.** The census keys its
+(identity, offset) pairs on `blockSources`, which is withdrawn as a block address, and the run says
+so in its own words -- 491,896 guest draws, 0 objects tracked, "no object was fed at all, so this run
+says nothing about the title", and the binder-fed block history at 0 observations against 823,431
+assemblies. **So the offset is measured and the node is not yet tied to it**, which is what condition
+2 asks for: identity being the node.
