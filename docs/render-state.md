@@ -1316,3 +1316,59 @@ payload reaching the frame through the vtable needs.
 The first word has a second problem: `lwzu r3, 0x24(r30)` presumes `r30` holds the display, and the
 update form leaves `r30` advanced by `0x24`, so the second group reads `display + 0x48` rather than
 where the first read.
+
+## The double-paint fault is not in the title's own code
+
+Two independent runs of the two-paint stand-in under gdb, each with the capture workload the fault
+needs, both faulting the same way. The backtrace is the **interpreter**, not recompiled code:
+
+```
+#0  ppcMem_readDataU32 (address=1763)                    at PPCInterpreterImpl.cpp:72
+#1  PPCInterpreter_LWZ (Opcode=2147682018 = 0x800306e2)  at PPCInterpreterLoadStore.hpp:285
+#2  PPCInterpreterSlim_executeInstruction                at PPCInterpreterImpl.cpp:1257
+#3  coreinit::__OSFiberThreadEntry                       at coreinit_Thread.cpp:1365
+```
+
+The handler computes `(rA ? gpr[rA] : 0) + imm`, so with `imm = 0x6e2` and `rA = 0` the guest read
+guest address `0x6e2` and `r0` was zero. The other run's opcode was `0x800006e2` -- the same
+displacement off `r0`, a different destination register.
+
+**And that instruction is not in the title's RPX.** Over the analyzed program:
+
+```
+scanned 9,432,460 executable bytes in 17 blocks
+  control 0x7c0802a6 (the display frame's first word, mfspr r0): 23,265 matches
+  sought  0x800006e2 (lwz r0,0x6e2(r0)):                         0 matches
+```
+
+The control being found 23,265 times is what makes the zero a result rather than a broken search.
+**So the faulting code is in coreinit, rpl or another of the title's RPX files, and not in
+`cking.elf`.** The question is therefore no longer what state the display object leaves behind; it is
+which library function runs on the second pass with `r0 = 0`. Nothing establishes that the display
+frame is not re-entrant -- that was inferred from where the fault surfaced, and the surface is the
+emulator's fallback interpreter.
+
+## The frame's own first words, and an offset that was wrong
+
+Read out of the listing's own bytes rather than from notes:
+
+```
+0x0274c264  0x7c0802a6  mfspr  r0                <- SPR 8, the link register, into r0
+0x0274c268  0x9421ffe8  stwu   r1,-0x18(r1)
+0x0274c26c  0x93c10010  stw    r30,0x10(r1)
+0x0274c270  0x93e10014  stw    r31,0x14(r1)
+0x0274c274  0x9001001c  stw    r0,0x1c(r1)
+0x0274c278  0x7c7e1b78  or     r30,r3,r3           <- the display pointer
+0x0274c27c  0x4bffedd9  bl     0x0274b054
+0x0274c280  0x807e0018  lwz    r3,0x18(r30)        <- the first sub-object
+```
+
+The listing this project has been quoting started at `0x0274c278`, so it **omitted the whole
+five-word prologue** and showed the `lwz` at an address two words later than the image's. Two
+consequences:
+
+- **The first sub-object is at `display+0x18`, not `display+0x24`.** Every claim that the frame's
+  call targets come from `*(display+0x24)` is wrong by an offset, and the display probe that reads
+  them through `+0x24` has been reading a field the frame does not read.
+- **The frame's first instruction clobbers `r0`** with the link register. A stand-in that expects `r0`
+  to survive a call into the frame is expecting a register the callee's first instruction overwrites.
