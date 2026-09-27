@@ -1647,3 +1647,54 @@ traced to -- the title's draw path, the loader arena's data, a probe's stub, a z
 payload called -- is code this project wrote, and the last two are now fixed. The remaining cause is in
 what the stand-in does after the frame returns, and the title's own drawing has not been implicated at
 any point.
+
+## The fault is deterministic, and the title's frame returns correctly
+
+With this project's two defects fixed -- the payload branch into a zero-filled hole, and the probe on
+the frame's first word -- two independent runs report the fault's guest state **byte for byte
+identically**:
+
+```
+OSSched[core=1]  via recompiled  guest pc=0x00e0586c  lr=0x0274c280  r1=0x0e275a38
+  r0..r7 = 00e05888 0e275a38 10008000 00000000 0e275a24 0e275a28 0e275a30 44213980
+```
+
+**The display frame returned correctly.** `lr` is its own seventh word, which is where a frame that
+returned from its sixth word belongs. **The guest is then at `0x00e0586c`, 300 bytes *below* the
+stand-in's own block**, and the register file is not the guest's: `r1` is `0x0e275a38`, which is not a
+guest address at all (MEM1 ends at `0x017fffff`, the loader arena at `0x00ffffff`); `r4`, `r5` and `r6`
+are four words at four-byte spacing, the shape of a structure; and `r3`, which the frame's first act
+copies into `r30` and which the probe reports as the display, is **zero**.
+
+A register file holding equally spaced words and a stack pointer that is not a guest address is what
+**executing data** looks like from the inside.
+
+**The recompiler is registered for the whole of it.** The loader's trampoline area is registered with
+the recompiler wholesale at startup, because the loader does put real code there -- which is correct as
+far as it goes. But the area's base is the HLE function registry's dispatch stubs, then its symbol
+names, then zero padding, and elsewhere in it the host's own bookkeeping. **None of that is guest
+code, and a branch into it is translated as instructions.** That is why the fault's address has been the
+same every run: the target is a fixed piece of the registry and the guest's path to it is
+deterministic.
+
+**So the remaining cause is not in the title.** A branch out of the frame's return path lands in the
+loader's data, and nothing in the frame or the display object is at fault -- the frame returned
+correctly, and the display's own fields were measured identical across paints. The discriminator for
+the last step is already in hand: the second paint as a **tail branch** survives and the second paint
+as a **call** faults, so the whole of what is left is what happens *after* the frame returns.
+
+## The frame writes one word above its own allocation
+
+Measured from the frame's own words, and worth stating before anything stands in for it twice:
+
+```
+0x0274c268  stwu  r1,-0x18(r1)     the frame is [old-0x18, old)
+0x0274c26c  stw   r30,0x10(r1)     -> old-0x08   inside
+0x0274c270  stw   r31,0x14(r1)     -> old-0x04   inside
+0x0274c274  stw   r0,0x1c(r1)      -> old+0x04   FOUR BYTES ABOVE ITS OWN ALLOCATION
+```
+
+The frame stores a word into **its caller's frame** every time it is entered -- with a stand-in as the
+caller, four bytes above the display thread's own stack pointer. It is the same address on the first
+paint and the second, so on its own it is not what makes a second call differ, but it does mean a
+stand-in in this title's return path is standing in a frame it is silently writing to.
