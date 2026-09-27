@@ -543,10 +543,47 @@ pose at `+0xc4` was reported as "unchanged when the camera turned", with the cam
 turn verified against `cWorldViewMatrix[0]` reading the same 16 floats before and
 after. That comparison was a string compared with itself, so it was always going to
 agree; the check looked like a control and was not one. **The view matrix's address
-is not known**, and finding it is the read in front of every pose measurement: the
-name table gives the uniform's name and the function that registers it
-(`0x02786520`), and where the value sits is what that function's caller or the
-shader that declares the uniform will say.
+is not known**, and finding it is the read in front of every pose measurement.
+
+**The chain from the name to the value's address, read out of the code.**
+
+`0x02786520` is the registration pass, and it fills in nothing: 5,372
+instructions, 955 calls to 16 distinct functions, and 559 of its 561 stores are
+stack spills. What it does is bind a name to a *slot*. The most-called callee,
+`FUN_027bb0ec` at 252 calls, is the whole of that:
+
+```
+puVar2 = *(undefined4 **)(param_1 + 0x2c);   /* a table of pointers */
+if (param_2 < *(uint *)(param_1 + 0x28)) { puVar2 = puVar2 + param_2 * 4; }
+*puVar2 = *param_3;                          /* the address, stored at a slot index */
+```
+
+and then the same store repeated across a table of `0x84`-byte records, from
+`*(param_1 + 0x7c)`, bounded by the count at `*(iVar1 + 0xc)`. So a uniform is bound
+to a **slot index in a per-shader table of pointers, and the pointer is the address
+its value lives at**. A second shape exists -- `FUN_0278b9cc` allocates an 8-byte
+cell on demand and stores a value and a vtable pointer in it -- so some uniforms are
+bound to freshly allocated cells rather than to a table slot.
+
+**So the view matrix's address is a pointer the pass is *handed*, and the pass has
+exactly one caller: `FUN_027b59f4`, 360 addresses, called once.** That caller stores
+no address of its own, so the addresses come from its own base or its own
+parameters. That is the next read and it is bounded: one function.
+
+The chain so far, with every address it came from:
+
+| what | where | what it says |
+|---|---|---|
+| the name | `0x10163bb4` | the string `cWorldViewMatrix[0]`, in the rodata name table |
+| the pass that registers it | `0x02786520` | 955 calls, 16 callees, 559 of 561 stores are spills |
+| how a name is bound | `0x027bb0ec` | a pointer stored at a slot index in a per-shader table |
+| where the address comes from | `0x027b59f4` | the pass's only caller, and it stores no address itself |
+
+The view matrix's address is therefore not a constant anywhere in the title: it is
+passed in, once, by one 360-address function. That is a better shape than a fixed
+address would have been -- a value the title hands to every shader is a value the
+blend can be handed too -- and it is why the pose at `+0xc4` and the camera's place
+are not obviously the same thing.
 
 ### The display loop, byte for byte, and what a second paint costs
 
