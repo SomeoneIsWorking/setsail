@@ -466,7 +466,53 @@ address, and it found the *object* -- whose vtable and heap pointers read perfec
 well, `0x140` before where the block is. "An address that reads" is worth nothing,
 and the report now carries offsets and says they are offsets.
 
-**The pose is at `+0xc4` of that block: twelve floats, and they are a rigid transform.**
+**The pose is at `+0xc4` of that block: twelve floats, and they are a rigid transform — but
+only at the moment they were dumped, and this section's claim is withdrawn as a statement about
+the block when the binder names it.** Measured on the real title, with a probe on the binder
+reading the block it is about to hand the GPU, on the display thread inside the title's own
+draw: over **236,694 bindings, no rigid transform at `+0xc4` in any of them**, and **233
+whole-block scans of four blocks, every 4-aligned offset, none anywhere in any of them.** The
+block is 256 bytes and its ring's two slots are `0x100` apart, and at the moment it is bound it
+holds no transform at any offset.
+
+The twelve floats below are real. What is wrong is the moment: they were dumped while the title
+was **held at a frame's end**, which is after the draw, and the blend runs at the bind, which is
+before it. So this is a dump of a block at a moment when the block had been filled, and not a
+statement about what is in it when the binder names it. **Withdrawn:** that `+0xc4` holds the
+pose as a fact about the bound block, and with it the idea that the binder is where a blend
+reads the pose from. The fill site is.
+
+**And the fill site is not the binder's siblings.** The binder is a method on a sub-object — the
+object it is handed *is* the sub-object, and the descriptor's entries are at `object + 0x10` —
+and the method table is **in the image**:
+
+```
+0x1016ef90  0x027ff96c   84 addresses
+0x1016ef98  0x027fba24  112 addresses
+0x1016efa0  0x027fba94   56 addresses
+0x1016efa8  0x027fbacc  140 addresses
+0x1016efb0  0x027ff88c  224 addresses   the binder
+0x1016efb8  end of the table
+```
+
+Five methods, eight bytes an entry, and the binder is the only one of the five that walks the
+descriptor — four have no line mentioning the cursor at `+0x4c` or the `0x1c` entry stride, and
+the binder's has exactly one, `param_1 + 0x10 + *(int *)(param_1 + 0x4c) * 0x1c`. So whatever
+fills the block is not on this object, and the ring's two entries exist so the GPU is not
+reading a block that is being written rather than to carry the previous tick — which is the same
+finding as the other slot reading zero at the pose's offsets, from a different direction.
+
+This also corrects an earlier note here, that the sub-object's methods "are dispatched through a
+vtable that has no references to follow". There are no references because the table is reached
+through a pointer the sub-object carries; the pointers are in the image, and the one naming the
+binder is at `0x1016efb0`. Following the call graph was never the way in.
+
+**The next read, and it is bounded.** Either the filler writes this block later in the frame
+than the bind that names it, or this is a different block from the one the dump was of. Hold the
+title at a frame's end and test every block of the known `0x100`-strided pool for a rigid 3x4 at
+every 4-aligned offset: a hit names the block and the offset, and no hit over the whole pool says
+the pose is not in that pool at all — a different answer, and a shorter search for the next one.
+The original dump:
 Dumped from the title while it ran, one slot against the other, 256 bytes each:
 
 ```
