@@ -991,3 +991,32 @@ the code actually has.
 Recorded here because it is a change of mechanism rather than a smaller version of the same one,
 and because the question the objective phrases has a definite answer: the pose is not held
 anywhere as a transform.
+
+
+## Where the position attribute is, measured from the title's own tables
+
+Because the pose is consumed into vertex bytes, the blend writes vertex bytes, so the one thing
+that had to be *known* is which attribute carries the position. It is measured rather than read
+out of a GX2 header, by how often each `(semantic, format, size, buffer, offset)` signature
+recurs across the title's own objects:
+
+    502,922 guest draws, 916,081 attributes read, 7 objects tracked (386,949 refused),
+    0 draws with no attributes, 1,994 with no node published, 0 naming a buffer the draw lacks
+
+    position: semantic 0, format 0x00000030, 12 bytes, buffer 0, offset 0, per instance 0
+      in 7 of 7 objects and 71,165 draws
+
+The near-misses are in the report and they matter. A *second* twelve-byte format-`0x30`
+attribute sits at offset 16, in 4 of 7 objects and 39,689 draws -- it clears the bar of 4 on its
+own. It is not named because the one at offset 0 is in 7 of 7, and a reader can see both. A
+report that filtered the runner-up out would have shown one line and called it a finding.
+
+What the format byte *is*, is not guessed: `0x30` is what the title pairs with a twelve-byte
+three-component position in 7 objects and 71,165 draws, and `0x1e` with the eight-byte ones.
+What `0x30` is called in Latte's enumeration is a lookup, and the report carries the byte in hex
+and in decimal so a reader need not take this one's word for it.
+
+The sampling limit is stated rather than buried: seven objects of the first eight the binder
+published, 386,949 refused, and those seven may be seven instances of one kind of thing. "7 of
+7" and "7 of the first 7" are not the same statement, and only one of them is what the number
+says.
