@@ -1698,3 +1698,44 @@ The frame stores a word into **its caller's frame** every time it is entered -- 
 caller, four bytes above the display thread's own stack pointer. It is the same address on the first
 paint and the second, so on its own it is not what makes a second call differ, but it does mean a
 stand-in in this title's return path is standing in a frame it is silently writing to.
+
+## The tail-branch shape faults too, and the block the report names does not hold the payload
+
+**The discriminator the port's notes offered is withdrawn.** `TailTwiceAtSixty` had been measured as
+"painting nothing" back when it shared the paint payload's `bl` at `0x028fad2c` with the two-paint call
+shape -- so that measurement was of a payload calling into a zero-filled hole and says nothing about the
+shape. Re-run with the hole call gone:
+
+```
+  at rest:      installed False (twiceAtSixty), probe installed, block 0x00e05880, 1554 paints, interval 2
+  armed mode 8: installed True  (tailTwiceAtSixty), probe installed, block 0x00e05880, 1555 paints, interval 1
+  next read:    connection refused
+```
+
+The interval field reads **1**, so the field write that replaced the hole call works and the arming
+succeeds. **Both two-paint shapes fault**, whether the second paint is a call or a tail branch, so "what
+happens after the frame returns" does not separate them and the tail branch is not a workaround.
+
+**And the block the report names does not hold the payload.** Read as bytes at the fault, with a
+two-paint mode armed and the report naming the block:
+
+```
+0x00e05880  c1 a6 00 48  89 df e8 15  7e 14 00 e9  78 f7 ff ff
+0x00e05890  48 8d 35 37  c1 a6 00 48  89 df e8 01  7e 14 00 e9
+0x00e058a0  64 f7 ff ff  48 8d 35 0d  c1 a6 00 48  89 df e8 ed
+```
+
+That is not the payload. The payload for that shape is three words of branches, and every one has `0x48`
+or `0x4b` in its top byte. What is there is a pattern repeating every `0x14` bytes whose words decode as
+ordinary non-branching instructions -- `0xc1a60048` is `lfs f13,0(r0,r12)`, `0x89dfe815` is `lbzu` --
+**so the address the paint mod reports as its own block holds, at the moment of the fault, a repeating
+pattern rather than the branches it wrote there.**
+
+Two readings fit and one measurement separates them, so neither is claimed: the block address moved
+between the arming that was recorded and the fault, or something overwrote the payload after it was
+written. The address is reported as `0x00e05898` in some runs and `0x00e05880` in others, and the
+fault's program counter sits consistently *just below* the block in both armings.
+
+This is the next thing to settle, and it is smaller than what came before: whether the words the mod
+wrote are still at the address it wrote them to when the guest runs. The product's own `/memory` accessor
+answers it.
