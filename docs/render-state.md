@@ -2008,3 +2008,64 @@ so in its own words -- 491,896 guest draws, 0 objects tracked, "no object was fe
 says nothing about the title", and the binder-fed block history at 0 observations against 823,431
 assemblies. **So the offset is measured and the node is not yet tied to it**, which is what condition
 2 asks for: identity being the node.
+
+
+## The identity is the node, and a refused probe was the reason it was not before
+
+**`mfspr r0,LR` is the first instruction of every function with a frame, and a probe refusal for
+exactly that word had been taking out this title's identity.** The refusal was added to stop a display
+frame probe from computing a different link register inside the stub than it does where it stands --
+correctly diagnosed -- and it applies to:
+
+```
+0x027ff88c   the binder, first word mfspr r0,LR     0 bindings over 823,431 assemblies
+0x027ff9c0   the second binder, same                0
+0x025d42ec   the logic gate's tick, same            0 calls with 240 paints in the window
+```
+
+All three in `.text`, all three real functions of 224 and 224 addresses. **The report said
+`installed as unknown and unknown`, read `identity: source blockSources` with 0 objects tracked, and
+`no object was fed at all, so this run says nothing about the title` -- and every one of those reads
+as a statement about the title rather than about the instrument.**
+
+### The fix, and what it changes here
+
+The stub now runs the displaced word **before** the call, so the link register is the one the caller's
+caller left and the instruction computes what it computes where it stands. The refusal is deleted. A
+second defect came with it -- the dispatch matched the program counter against the stub's *base*,
+which worked only because the call was the stub's first word -- and the registration now carries the
+call's own address. Both are in the cemu fork at `c891998`.
+
+### What this title says with its instruments restored
+
+```
+binder probes at 0x027ff88c and 0x027ff9c0, installed as installed and installed:
+  167959 bindings recorded, 589 objects
+  195581 bindings recorded, 590 objects
+identity: source objectAddress, 14 distinct identities, 128 tracked (identity, offset) pairs
+affine bar: 92 offsets ever in this class, 10 held often enough, 10 of those seen to move; best offset 60
+```
+
+**`identity: source objectAddress` is the node**, which is what a blend needs and what the census was
+not saying before. The pose is still **offset 60** of the assembled uniform block, and it moves in 10
+of the offsets held often enough -- now over 14 node identities rather than 7 withdrawn block
+sources.
+
+**And tick N-1's uniform block is still present when tick N paints:**
+
+```
+16 of 16 comparisons say still present, 0 say overwritten, 0 could not be read;
+8 consecutive pairs used different addresses, which is double buffering measured
+16 distinct block addresses over 8 objects, leading address 0x3b5bd500 seen 99829 times
+```
+
+The earlier withdrawal -- "whether the other slot holds tick N-1's values is withdrawn" -- **is
+reversed.** It was measured with the binder silent, so the two slots it compared were not the two the
+title was using.
+
+**The node's own field does not hold a changing pose, and that is the answer with denominators.** Over
+a 2,588-byte window the loose class finds a 3x4 at offset 100 in 7 of 8 objects, at 276 in 7 of 8, at
+288 and 376 in 5 of 8 -- and 0 of them moved, biggest delta exactly 0, across 21, 21, 15 and 15 repeat
+comparisons. A static prop's own transform not moving while the camera moves is what a static prop
+does. **So the chain is: the node is the identity, the draw assembles the uniforms, and the pose is
+offset 60 of that assembly -- which is the chain the objective named, with each link measured.**
