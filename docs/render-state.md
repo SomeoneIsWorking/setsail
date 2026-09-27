@@ -507,11 +507,50 @@ vtable that has no references to follow". There are no references because the ta
 through a pointer the sub-object carries; the pointers are in the image, and the one naming the
 binder is at `0x1016efb0`. Following the call graph was never the way in.
 
-**The next read, and it is bounded.** Either the filler writes this block later in the frame
-than the bind that names it, or this is a different block from the one the dump was of. Hold the
-title at a frame's end and test every block of the known `0x100`-strided pool for a rigid 3x4 at
-every 4-aligned offset: a hit names the block and the offset, and no hit over the whole pool says
-the pose is not in that pool at all — a different answer, and a shorter search for the next one.
+**Why the block held no transform: it is 64 bytes.** The binder's second argument is the
+descriptor entry's word at `+0x0c`, and it reads `0x40` for every object measured — but `0x40`
+is the block's **size**, not an offset inside a 256-byte block. In the emulator's own
+`GX2SetVertexUniformBlock` the three arguments are `(index, size, address)` taken from
+`hCPU->gpr[3..5]`, which settles it. A 64-byte block cannot hold twelve floats, so the 233 scans
+were reading a window around a block that was never going to contain one, and the two findings
+agree.
+
+**And the node's own draw says where the pose really is.** `vtable 0x10036300` slot `+0xc` is
+`FUN_02160018` — 1,536 addresses — and it is the node's draw:
+
+```
+uVar1  = *(uint *)(param_2 + 0xc);                             /* which draw record */
+puVar7 = *(undefined4 **)(param_1 + 0xa4);                     /* the node's record array */
+if (uVar1 < *(uint *)(param_1 + 0xa0)) puVar7 = puVar7 + uVar1 * 5;   /* 5-word stride */
+puVar7 = (undefined4 *)*puVar7;                                /* the record */
+GX2CallDisplayList(*(undefined4 *)(pbVar5 + 4));               /* the draw is a display list */
+iVar8 = *(int *)(*(int *)(param_2 + 0x14) + 4);                /* the sub-object */
+iVar8 = iVar8 + 0x10 + *(int *)(iVar8 + 0x4c) * 0x1c;         /* the binder's own arithmetic */
+```
+
+So the chain in the objective's framing is real and has addresses: **node → `+0xa4` → a
+5-word-strided record array → the record → a pointer whose shorts at `+0xc` and `+0xe` are a
+range of uniform block indices.** Two shorts two bytes apart is a range, which is the "uniform
+block index" — and the block it indexes is addressed through GX2's own uniform block table, not
+through the sub-object's descriptor.
+
+Note also that the node's draw computes the sub-object's descriptor entry **itself**, with the
+binder's exact arithmetic, in the same function. The binder and the draw are two readers of one
+descriptor; following the call graph from either would have found the other, and the earlier note
+here that the sub-object's methods have no references to follow is why it was not followed.
+
+**So the pose is in the block the record's index range names, and the emulator already holds
+it.** `LatteFrameHooks::UniformAssembly` records per draw the assembled uniform `data` and
+`sizeInBytes`, the guest `blockAddresses` the draw sourced as `(bufferId, physicalAddress)`
+pairs, and on the `DisplayList` it belongs to **whose draw it is**. The pose is therefore inside
+the bytes the game itself assembled for a *named node's draw*: its offset within them is found
+once, by the rigid-transform test over a bounded set of draws, and is then a constant. And
+whether tick N-1's values are present when tick N paints is answered by the frame recording the
+emulator already keeps.
+
+**This document's earlier reading is corrected by it.** The claim that "a blend cannot read N-1
+out of the ring" was true of the ring and irrelevant: the ring's 64-byte blocks are not where the
+pose is, so the ring was never the place N-1 would have come from.
 The original dump:
 Dumped from the title while it ran, one slot against the other, 256 bytes each:
 
