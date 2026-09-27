@@ -1227,6 +1227,19 @@ uniform blocks. Neither scan read a uniform block.
 draw sourced** -- the best word hit 3 times, a share of 2.1e-05 against a 50% bar. That is the
 negative result, and it is now negative for a known reason rather than for a suspected one.
 
+**Condition 2's second question: answered yes.** The ring is fed the title's own two record words
+-- the address and the size the binder passes to `GX2Set*UniformBlock` -- and over 178,021
+bindings it finds **8 objects naming 16 distinct block addresses**, one transition per object, which
+is double buffering measured. The ring never compares across an address change, so each of its
+**16 of 16** "still present" verdicts is between two bindings of the same object at the same
+address, at least two ticks apart: the previous use of that address is still there when the next
+tick binds.
+
+**And this is not the block the withdrawn scan read.** Those 233 scans read `object + 0xFC` --
+the record's own word 1 used as an address -- while these addresses sit far from their objects
+(leading offset 0xA7C44, 16 distinct offsets over 8 objects). So "every transform is static" was
+never a statement about these 64 bytes, and the pose scan has to be redone against this address.
+
 **What this reopens.** The objective's first question -- which node field holds the pose -- was
 answered "none" partly on the strength of those two scans. That answer does not stand, and the
 o start again from a real uniform block. The pool is real, and the title names its block by a
