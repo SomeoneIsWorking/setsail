@@ -446,13 +446,57 @@ lerp of two reads of the title's own state, and nothing has to be recorded and
 replayed. That is the question this document said had to be measured rather than
 assumed, and it is now measured, with the denominators above.
 
-Still open, and the next single read: who fills the entry at the cursor. Not one of
+**Still open, and the next single read: who fills the entry at the cursor.** Not one of
 the candidates so far is it -- a search by offset cannot be, and the object is not
-where it is. And the entry's word at `+0x04`, which the binder's own decompilation
-passes to `GX2Set*UniformBlock`, reads `0x3e634300` -- a pointer, not a length. A
-tool that took it for a byte count asked the product for a gigabyte and the product
-died, so the field's meaning is now open too, and no bound on a dump comes from the
-title until it is read.
+where it is.
+
+**The entry's word at `+0x04`, and the pose, are both now read, and they were read by
+following the binder rather than by guessing.** The word at `+0x04` read `0x3e634300`
+on a real binding and was called a pointer rather than a length, which was right and
+left it unexplained. It is the *block's own address*: the two slots of every object
+measured are exactly `0x100` apart, five objects in a row, and the word at `+0x0c`
+that the binder passes to `GX2Set*UniformBlock` is `0x40` for every one of them -- a
+constant, so an offset within the block and not a size. So a uniform block is 256
+bytes, its address is in the descriptor, and the two the ring turns between are 256
+bytes apart in the title's own heap.
+
+A first attempt resolved that address the other way, by trying each word of the
+entry, adding the entry's own offset and keeping the first that read. It found an
+address, and it found the *object* -- whose vtable and heap pointers read perfectly
+well, `0x140` before where the block is. "An address that reads" is worth nothing,
+and the report now carries offsets and says they are offsets.
+
+**The pose is at `+0xc4` of that block: twelve floats, and they are a rigid transform.**
+Dumped from the title while it ran, one slot against the other, 256 bytes each:
+
+```
+   (   0.638175,    0.010258,   -0.769823 )
+   (   0.586924,    0.640629,    0.495090 )   translation (22547.72, -8514.89, -6188.70)
+   (   0.498250,   -0.767782,    0.402813 )
+```
+
+Row lengths `1.000000 1.000000 1.000000`, and the three row dot products
+`0.000000 0.000000 0.000000`. Unit length and mutually perpendicular to six decimal
+places is what makes it a transform rather than three rows of numbers that happen to
+be near unit length, and the translation sits beside it in the same 12 words. The
+fourth float of each group of four is zero, so it is a 3x4 and not a 4x4 with a
+row dropped.
+
+**And the other slot at those same offsets is zero.** Not a previous pose: nothing.
+Which is the finding that matters, and it cuts against the paragraph above. The
+cursor turns -- 0.297 switches a binding, measured -- but a slot the title has not
+written reads as zeros, so *the cursor turning is not the same thing as the previous
+tick's values being in memory*. Counting non-zero words settles it: across four
+objects the two slots read 19 and 52 non-zero words of 64, the same for every
+object, and **unchanged while the camera turned** (`rightx=0.5`, then `-0.4`) --
+zero of 64 words differing in the bound slot before and after. A per-tick pose would
+have moved when the camera moved.
+
+So the two readings are different findings and the earlier one was the wrong one. The
+ring turns; what the two slots hold at the moment of a bind is one transform and
+one unwritten block. Whether a blend can read two ticks' poses from this pair is not
+established, and the measurement that would settle it is a read of the same offsets
+at two different *times* on the same object -- which is what this next read is.
 
 **The game names its own view uniforms.** Its rodata carries `cWorldViewMatrix[0]` at
 `0x10163bb4` and `cWorldViewProjectionMatrix[0]` at `0x10163d00`, beside `uBlurOffset`,
