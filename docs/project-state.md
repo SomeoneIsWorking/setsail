@@ -4,17 +4,15 @@ Factual capability inventory for Wind Waker HD on Linux. Epic intent is in
 `docs/project-goals.md`. Every item is `verified`, `partial`, `blocked`, or `missing`.
 
 **Current focus.** ST-PAINT -- the guest paint path that would replace the statistical lerp. One
-question is open and it is the whole of what is left: **the faulting instruction of the second paint
-pass belongs to a module this project has not analysed.** It arrives through
-`PPCInterpreterSlim_executeInstruction`, the recompiler's fallback, on the display fiber, with the
-program counter in the loader's arena and the link register inside the stand-in's block; decoded with
-the byte order right it is `lwarx r16,r6,r0`, a load-and-reserve, and it is not in this title's RPX
-(0 matches over 9,432,460 executable bytes against a control found 4,893 times). So the next step is
-identifying the module that arena address belongs to, which is a question about cemu's loader rather
-than about the title's draw path. The evidence is in `docs/render-state.md`; the mechanism and the
-instruments are in `wiiuport` `docs/frame-interpolation.md`. Second: ST-60 -- the objects three frames
-cannot verify, and the uneven halves of a tick (ST-PERF). The work is in `wiiuport`; this inventory
-points at its evidence.
+question is open: **what sends the guest into the loader's arena after the display frame has returned.**
+Every location this fault has now been traced to is code this project wrote, and two of them are fixed
+and measured: a payload branch into a zero-filled hole at `0x028fad2c`, and a probe sitting on the
+frame's first word `mfspr r0, LR`, which the frame returns through. With both fixed the register that
+was wrong is right -- `lr = 0x0274c280` is the frame's own seventh word -- and the guest still reaches
+the arena. **The title's own drawing has not been implicated at any point.** The evidence is in
+`docs/render-state.md`; the mechanism and the instruments are in `wiiuport`
+`docs/frame-interpolation.md`. Second: ST-60 -- the objects three frames cannot verify, and the
+uneven halves of a tick (ST-PERF). The work is in `wiiuport`; this inventory points at its evidence.
 
 ## Comparison baseline
 
