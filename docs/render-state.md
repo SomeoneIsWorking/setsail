@@ -514,12 +514,39 @@ verified against `cWorldViewMatrix[0]`, then the pose read before and after. Tur
 the camera through the control channel at all is the step in front of that, and it
 is not yet done.
 
-**The game names its own view uniforms.** Its rodata carries `cWorldViewMatrix[0]` at
+**The game names its own view uniforms — and the addresses this document gave for them
+are the names, not the variables.** Its rodata carries `cWorldViewMatrix[0]` at
 `0x10163bb4` and `cWorldViewProjectionMatrix[0]` at `0x10163d00`, beside `uBlurOffset`,
 `uOneMinusNearDivFar`, `cAngleScale`, `cColorScale`, `cInvTexSize`, `cFrameRCP1H` and
 `cToyCam_Saturation1`, all referenced from one name-table function `0x02786520`. The matrix
 this document's first section finds by watching which shaders share an orthonormal 3x4 and
 how it moves is, in the title's own words, a uniform called `cWorldViewMatrix`.
+
+**What those two addresses are, measured.** Dumped from the running title and read
+as text:
+
+```
+0x10163bb4: "cWorldViewMatrix[0] uBlurOffset uOneMinusNearDivFar "
+0x10163d00: "cWorldViewProjectionMatrix[0] cViewLightDir cDepth[0] cCol..."
+```
+
+**They are the uniform names, in the rodata name table -- not the variables.** A name
+in a table is where the shader compiler put the string, and nothing ever writes it.
+So they are a uniform-name list, which is worth having on its own: it says the
+matrix is a uniform and what the title calls it. It is not where the value lives,
+and any tool that reads one of these addresses reads the name. The earlier claim in
+this document, and in the objectives this work answers, that these are the addresses
+of the view matrices is withdrawn.
+
+This also explains a measurement that was taken to mean something and did not: the
+pose at `+0xc4` was reported as "unchanged when the camera turned", with the camera
+turn verified against `cWorldViewMatrix[0]` reading the same 16 floats before and
+after. That comparison was a string compared with itself, so it was always going to
+agree; the check looked like a control and was not one. **The view matrix's address
+is not known**, and finding it is the read in front of every pose measurement: the
+name table gives the uniform's name and the function that registers it
+(`0x02786520`), and where the value sits is what that function's caller or the
+shader that declares the uniform will say.
 
 ### The display loop, byte for byte, and what a second paint costs
 
