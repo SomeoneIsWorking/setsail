@@ -1132,3 +1132,41 @@ to have one, the census was reading bytes that are not positions.**
 Four of the seven layouts are *unresolved*, which is the honest word: the magnitude bar refuses
 them rather than naming a position and reading rubbish. A layout the census has not solved is a
 different thing from a layout with no position, and the report says which.
+
+
+## Every layout is refused, and that is the answer
+
+With the denormal floor's non-zero clause in place -- a vertex at the origin is a position, a
+1.7e-38 denormal is not -- the census refuses **all eight** of the title's vertex layouts, and
+the histogram says why with a number: at the stride-32 offset 0, in 7 objects and 15,976 draws,
+**136,381 components implausible**, against a 1% bar. 479,158 draws seen and 479,158 with no
+position named.
+
+So the position attribute cannot be identified in any layout by the title's own attribute table.
+Not "the position does not move" and not "the blend is hard": at every candidate offset roughly
+one vertex in ten reads as something that is not a position.
+
+The falsifier, with no position to read, has nothing to compare -- 0 of everything, 0 nodes
+tracked. That is not a negative result, it is the absence of a measurement, and it is reported as
+such.
+
+**Where the objective's own terms stand.** Measured on the real title, with every instrument
+corrected against its own false positives:
+
+1. **No node field holds the pose.** The node's leading 2,588 bytes, the sub-object's 4,096 at
+   `node + 0xa1c`, the binder's 64-byte block, and 838,155 assembled uniform buffers were read
+   with a working identity and frame-apart samples. Every transform in every one is static; the
+   only moving values sit at row scales of 4 to 81, which are projection constants.
+2. **The title consumes the pose into vertex bytes**, which is why: it positions geometry on the
+   CPU each frame and hands GX2 a display list of already-transformed vertices. That is also why
+   the mechanism being retired needed `VertexBlend`.
+3. **The position attribute cannot be found by the title's own attribute tables**, in any of
+   eight layouts, because the candidate offsets are not positions for a substantial minority of
+   vertices.
+
+**The remaining route is the one the objective names and the attribute table does not carry: the
+vertex shader's own input declaration.** The draw gives the fetch shader's attribute table, whose
+`semanticId` is an index whose *meaning* lives in the shader's input declaration -- and that
+declaration is in the guest's shader memory, not in the draw. Guessing that `semantic 0` means
+position is precisely the assumption every measurement in this log exists to refuse, so it has not
+been made.
