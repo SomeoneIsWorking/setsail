@@ -426,15 +426,33 @@ tree node, not a descriptor ring.
 So the code does not say, and the honest position is that the answer is a
 measurement: the census now reads **both** slots on every binding and counts how
 often the cursor moved between consecutive bindings of the same object, against the
-number of bindings that could have been a switch at all. Near one switch per bind
-and the two slots are two passes; near zero and the choice is not per bind. A title
-that drew each object once would report no switches for a ring that works, which is
-why the compared count is reported beside the switch count rather than the switches
-alone.
+number of bindings that could have been a switch at all.
+
+**Measured, and it is two frames.** Over 3,025,779 bindings across 583 objects in
+one driven run, the cursor read entry 0 on 1,514,669 of them and entry 1 on
+1,511,110 -- an even split, which is what a two-slot ring looks like -- and it
+moved on **898,547 of 3,023,213 repeat bindings, 0.297 per bind**. Both slots in
+equal measure rules out a cursor that never turns. A third of a switch per binding
+is what per-*frame* turning looks like: an object drawn in three passes inside one
+frame produces two consecutive bindings with no move and one across the frame
+boundary that does, and 1/(3-1) is 0.5, 1/(2-1) is 1.0, and the observed 0.297 sits
+where two or three passes per object per frame puts it. A cursor that flipped per
+*bind* would have switched on every repeat binding, near 1.0.
+
+So the two slots are two frames, and the consequence is the one a blend needs:
+**when tick N binds, the other slot still holds tick N-1's values.** Both ticks'
+poses are in memory at the moment the draw happens, so an in-between frame is a
+lerp of two reads of the title's own state, and nothing has to be recorded and
+replayed. That is the question this document said had to be measured rather than
+assumed, and it is now measured, with the denominators above.
 
 Still open, and the next single read: who fills the entry at the cursor. Not one of
 the candidates so far is it -- a search by offset cannot be, and the object is not
-where it is.
+where it is. And the entry's word at `+0x04`, which the binder's own decompilation
+passes to `GX2Set*UniformBlock`, reads `0x3e634300` -- a pointer, not a length. A
+tool that took it for a byte count asked the product for a gigabyte and the product
+died, so the field's meaning is now open too, and no bound on a dump comes from the
+title until it is read.
 
 **The game names its own view uniforms.** Its rodata carries `cWorldViewMatrix[0]` at
 `0x10163bb4` and `cWorldViewProjectionMatrix[0]` at `0x10163d00`, beside `uBlurOffset`,
