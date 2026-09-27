@@ -1495,3 +1495,57 @@ that claim, this one survives the byte-order fix. What is consistent across ever
 the program counter is in the loader's arena at `0x00e000xxx` and the link register is inside the
 stand-in's block. The second paint enters the arena and leaves it executing something outside the
 title's code, and the arena is where the mod's stand-in and its probes live.
+
+## The objective's payload hands the display frame the wrong pointer
+
+The frame takes the display and dereferences `+0x24` itself -- measured from all 85 of its
+instructions, not quoted from a prologue:
+
+```
+0x0274c278  or    r30,r3,r3        the display pointer, from r3
+0x0274c280  lwz   r3,0x18(r30)     the display's +0x18
+0x0274c288  lwz   r10,0x24(r30)    the call-target base, read five times in the function
+0x0274c28c  lwz   r12,0xd4(r10)    a call target, off that sub-object
+```
+
+The payload's first word does that dereference in the caller -- `lwzu r3,0x24(r30)`, then
+`or r31,r3,r3`, then `bctrl` -- so `bctrl` calls the frame with `r3` = the **sub-object**, not the
+display. The frame's `or r30,r3,r3` then makes `r30` the sub-object, and every field it reads is the
+sub-object's. **`+0x24` is read five times and each read feeds a `bctrl` target**, so the wrong level
+of indirection does not merely read the wrong fields: it dispatches through targets read out of
+whatever the sub-object points at.
+
+The `lwzu` form compounds it -- the update leaves `r30` advanced by `0x24`, so the payload's two groups
+are two passes over two different addresses, not two over the same tree.
+
+**So the payload has two independent defects, neither of them a missing register:** word 1
+pre-dereferences the call-target base for a frame that wants the display, and word 2 reads the slot the
+mod has just rewritten, so `mtspr CTR` takes the stand-in's own address. A payload with eleven words has
+one call target and one call site; this one has two of each and they disagree. Both were predicted by
+the mechanism's own measurements before the payload was run, and the run agrees -- no paint, no fault.
+
+## The loader arena's base is the HLE registry, not code
+
+`MEMORY_CODE_TRAMPOLINE_AREA_ADDR` is `0x00E00000` with a 2 MiB size -- the area
+`RPLLoader_AllocateTrampolineCodeSpace` hands out from, and the area the recompiler is registered for
+wholesale at init because the loader does put real code in it. Its first `0x38` bytes, read as bytes:
+
+```
+0x00e00000  04 00 01 96  04 00 02 78  04 00 02 8d  04 00 02 91   HLE calls, one per entry
+0x00e00030  04 00 02 c2  04 00 02 ff  4e 80 00 20                then `bctr`
+0x00e00038  6e 6e 5f 61 63 74 2e 46 69 6e 61 6c ...              nna_act.Finalize__Q32_2nn3actFv
+0x00e00060  00 00 00 00 ...                                       zeros
+```
+
+`0x0400xxxx` is cemu's HLE call encoding -- `1u << 26 | hleIndex`, the same shape a probe's dispatch
+stub uses -- so the arena's base is the **HLE function registry's code, then its symbol names, then
+zero padding**. The mod's stand-in is at `0x00e05898`, about 22 KiB past that, and a probe stub sits
+at `0x00e058b4`.
+
+The double-paint fault's program counter is in that range on every run (`0x00e0006a8`, `0x00e000768`,
+`0x00e000e28` across three), so **a branch into the arena lands in the registry table or the zeros
+after it and executes data as code.** That accounts for the whole signature with no appeal to the
+display's state -- and it makes the display object being cleared a consequence of the frame never
+having been entered rather than a cause. Which branch goes there is still unknown; the candidates are
+the stand-in's control flow after the frame returns, or one of the frame's five `bctrl`s, whose targets
+come from `display+0x24` and are measured identical across paints.
