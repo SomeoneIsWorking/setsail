@@ -1153,10 +1153,13 @@ such.
 **Where the objective's own terms stand.** Measured on the real title, with every instrument
 corrected against its own false positives:
 
-1. **No node field holds the pose.** The node's leading 2,588 bytes, the sub-object's 4,096 at
-   `node + 0xa1c`, the binder's 64-byte block, and 838,155 assembled uniform buffers were read
-   with a working identity and frame-apart samples. Every transform in every one is static; the
-   only moving values sit at row scales of 4 to 81, which are projection constants.
+1. ~~**No node field holds the pose.**~~ **Withdrawn** -- see "The descriptor record holds no
+   block address" below. The node's leading 2,588 bytes and the sub-object's 4,096 at
+   `node + 0xa1c` were read with a working identity and frame-apart samples, and everything in
+   them is static, so *those* two scans stand. The binder's 64-byte block and the 838,155
+   assembled uniform buffers do not: both read the object's own structure rather than a uniform
+   block, and "every transform in every one is static" was a true statement about something else.
+   The question is open again.
 2. **The title consumes the pose into vertex bytes**, which is why: it positions geometry on the
    CPU each frame and hands GX2 a display list of already-transformed vertices. That is also why
    the mechanism being retired needed `VertexBlend`.
@@ -1170,3 +1173,66 @@ vertex shader's own input declaration.** The draw gives the fetch shader's attri
 declaration is in the guest's shader memory, not in the draw. Guessing that `semantic 0` means
 position is precisely the assumption every measurement in this log exists to refuse, so it has not
 been made.
+
+## The descriptor record holds no block address, and the 64-byte "block" was the record itself
+
+The binder at `0x027ff88c` / `0x027ff9c0` was decompiled to find the block's address. It reads:
+
+```c
+uVar6 = *(uint32 *)(iVar2 + 4);      /* third argument  */
+uVar4 = *(uint32 *)(iVar2 + 0xc);   /* second argument */
+GX2SetVertexUniformBlock(iVar5, uVar4, uVar6);
+```
+
+and on the host side `external/cemu/src/Cafe/OS/libs/gx2/GX2_shader_legacy.cpp` writes one of
+those two into the uniform block register as `memory_virtualToPhysical(...)`, **with nothing added
+to it**. So the record's two words are the address and the size and **there is no base to find** --
+an earlier measurement that histogrammed `address - offset` over 180,707 bindings was computing
+the difference of a size and an address, and is deleted.
+
+**The records, quoted raw** (four of them, from the report's `sampleRecords`):
+
+```
+object 0x3e595304: [0x3e5953d0, 0x3e595400, 0x3e595400, 0x40, 0x40, 0x03010000, 0x10163e00]
+object 0x3e597adc: [0x3e5957c0, 0x3e5957e0, 0x3e5957e0, 0x40, 0x40, 0x03010000, 0x10163e00]
+object 0x3e5976e0: [0x3e5972c0, 0x3e5974e0, 0x3e5974e0, 0x40, 0x40, 0x03010000, 0x10163e00]
+object 0x3e5972e4: [0x3e5972c0, 0x3e5974e0, 0x3e5974e0, 0x40, 0x40, 0x03010000, 0x10163e00]
+```
+
+Read against `object + 0x10`, which is where `readEntry` starts:
+
+- Words 0, 1, 2 are **pointers into the object's own structure** -- `object + 0xcc`, `object +
+  0xec`, `object + 0xec`. That is why five of the seven words "read as guest memory": they point
+  into the object's own mapped neighbourhood. They were never block addresses.
+- Words 3 and 4 are **both `0x40`**. The binder hands `GX2Set*UniformBlock` the pair
+  `(0x40, 0x40)`, so the register holds `0x40` where the binder wrote. **There is no block address
+  in this record.**
+- Word 6 is `0x10163e00`, 0x24c past `cWorldViewMatrix[0]` at `0x10163bb4` -- the record points
+  into the title's global data, not at a uniform block.
+
+**Which voids the "233 whole-block scans agreed" evidence, and says exactly why.** The 64-byte
+block was `entry[1]` used as an address, and `entry[1]` is `object + 0xfc`. So all 233 scans read
+**the object's own descriptor neighbourhood**, 0xfc bytes into the object, and agreed because they
+were 233 readings of one piece of static structure. The same goes for the 838,155 "assembled
+uniform buffers": those addresses come from `blockSources`, which reads word 0 of the bank the
+draw's *shader* names, while the guest writes each bank by the index it passes to
+`GX2Set*UniformBlock`. Two different numbers, so the value read is whatever last wrote that
+register slot -- 1,555 distinct values over 382,575 sourced addresses.
+
+So **"every transform in every one is static" is withdrawn.** It was a true statement about the
+title's own object structures and about a register file, and it was read as a statement about the
+uniform blocks. Neither scan read a uniform block.
+
+**Measured over 142,682 exact per-object pairs, no word of the record matches any address the
+draw sourced** -- the best word hit 3 times, a share of 2.1e-05 against a 50% bar. That is the
+negative result, and it is now negative for a known reason rather than for a suspected one.
+
+**What this reopens.** The objective's first question -- which node field holds the pose -- was
+answered "none" partly on the strength of those two scans. That answer does not stand, and the
+search for the pose has to start again from a real uniform block. The next read is bounded: the
+title's own write is visible in the register the binder fills, as word 0 `0x40` and **word 1
+`0x3f`** at `mmSQ_VTX_UNIFORM_BLOCK_START + index * 7`, so reading the uniform-block register
+bank and keeping the slots whose size word is `0x3f` names the banks the title actually filled --
+the size word is the discriminator because it is a small constant the title wrote, where word 0 is
+whatever the register held before. That needs one seam, beside `LatteFrameHooks::UniformAssembly`,
+which today carries the address the *shader* names and not the one the *binder* wrote.
