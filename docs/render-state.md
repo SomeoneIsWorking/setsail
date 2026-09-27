@@ -952,3 +952,42 @@ entry is `0x9421FEB8`, a value derived from the signed decimal the disassembler 
 as `0x9422FEB8`, and the refusal -- `entryHeldOther` -- read exactly like a real finding about
 the game. Every payload word is lifted from the image, never derived, because a derived one is a
 word nobody checked.
+
+
+## The pose is not held anywhere as a transform, and that redirects the blend
+
+The objective asks for "which node field holds the pose". It was looked for in four places,
+with a working identity and a sample schedule that puts every comparison a frame apart, and it
+is not in any of them.
+
+| place | samples | what is there |
+|---|---|---|
+| the node's own leading 2588 bytes | 8 objects x 4 frames | transforms, all static |
+| the sub-object's 4096 bytes at `node + 0xa1c` | 8 objects x 4 frames | transforms, all static |
+| the binder's 64-byte uniform block | 233 whole-block scans | nothing |
+| 809,682 assembled uniform buffers | 75,703 repeat comparisons per offset | nothing rigid in 20% of them, and nothing that moves |
+
+**The identity was the thing that made the last row mean anything.** The fork's own header
+called `blockSources` "the engine's own storage for the object, and the only identity a
+recorded draw carries", and measured it matched **one** identity across the 438,872 assemblies
+that had sources -- the uniform block is re-uploaded at a new guest address each frame, so the
+address set is nearly unique per draw. That gave the movement test 63 comparisons to work with.
+Using the node, which the binder already publishes and the GX2 hook cannot see, gives 75,703.
+Same bars, same run: a thousandfold more comparison, and the answer does not change.
+
+**So the title keeps no pose at draw time.** The only values that move are at row scales of 4
+to 81, which are projection constants and coordinates rather than transforms. This is
+consistent with how the game works and with why the mechanism being retired existed: the title
+positions geometry **on the CPU each frame** and hands GX2 a display list of
+already-transformed vertices, so the pose has already been consumed into vertex bytes by the
+time anything could read a field. `VertexBlend` existed to paper over exactly that.
+
+That makes the blend's landing place the **vertex stream at the game's own draw**, not a field
+to lerp, and the fork already has both halves of it: the uniform assembly's data is writable at
+the last point before the buffer is uploaded, and the draw observer hands over vertex
+replacements at the draw. Identity is the node -- the objective's own answer, and now the one
+the code actually has.
+
+Recorded here because it is a change of mechanism rather than a smaller version of the same one,
+and because the question the objective phrases has a definite answer: the pose is not held
+anywhere as a transform.
