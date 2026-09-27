@@ -1851,3 +1851,58 @@ across runs with *different* program counters is not a register file that comput
 So the guest is running a repeating `0x14`-stride pattern somewhere in the loader's arena. Where that
 pattern lives has to be read through an accessor that can refuse, and this title's drawing is no longer
 implicated: the frame executes its own code normally two words past the probe's resume.
+
+## The paint mod's stand-in now reaches the frame twice and paints, at 54 a second
+
+The display thread's loop is eleven instructions, and its dispatch is five words at `0x0274c020`:
+
+```
+0x0274c018  or    r31,r3,r3      the display, out of r3 and into r31
+0x0274c020  lwz   r12,0x24(r31)  the vtable        } the loop's top is its
+0x0274c024  lwz   r0,0xcc(r12)   slot 0xcc, frame } FOURTH word, not its first
+0x0274c028  mtspr CTR,r0
+0x0274c02c  or    r3,r31,r31     the display back into r3, before the call
+0x0274c030  bctrl
+0x0274c034  b    0x0274c020     the loop
+```
+
+**The loop rebuilds `r3` from `r31` before every dispatch**, because the display frame is a method on
+the display: it takes it in `r3`, copies it to `r30`, dereferences `r30` for every field, and then treats
+`r3` as scratch for the rest of its body. A stand-in that does not rebuild `r3` hands the second paint a
+scratch register where the display belongs -- which is what the fault was, measured as the frame's `r30`
+being **zero** with the display object sitting in `r31`.
+
+**The objective's eleven words are these five, with every register field shifted along by one** --
+`lwz r12` became `lwzu r3` off `r30`, `mtspr CTR,r0` became `mtspr CTR,r12`, and `or r3,r31,r31` became
+`or r31,r3,r3`. Every opcode and every displacement is identical and every register is wrong, which is
+why that payload read the slot the mod rewrote and called itself.
+
+Built as two shapes and measured:
+
+- **the loop's own five words twice** -- installs, does not fault, and does **not** paint, because its
+  second word re-reads slot `0xcc`, which the mod rewrote with the stand-in's own address;
+- **the same dispatch with the frame carried as a literal** -- the one thing the loop's dispatch cannot
+  express, since after the mod is installed the slot holds the stand-in rather than the frame. Built
+  with `lis`/`ori` whose forms are lifted from this title's image and whose immediates are the address
+  the mod read out of the slot before rewriting it.
+
+**The second one installs, does not fault, and paints:**
+
+```
+at rest:       1549 paints, interval 2
+armed:         1550 paints, interval 1
+62.7s:         1804 paints
+```
+
+**254 paints over 4.7 s is 54.0 a second**, against 30.1 for the same window with the mod out.
+
+**The title's own record of the interval is a statement about the gate, not a thing that opens it.** A
+run that wrote `display+0x50 = 1` and left the emulator's flip pacing alone reported `interval 1` while
+the paints ran at **29.8 a second**. The display thread's rate follows the flip pacing; the field only
+records what was asked for. Both are set now.
+
+**Consecutive captures differ by 1,795,613 to 3,598,070 of 6,220,816 bytes** -- but those are
+consecutive *ticks*, not the two paints of one pass, so they show the picture is changing and not that
+the two paints of a pass differ from each other. The second is condition 4's discriminator and needs a
+capture landing on one tick's two paints. It is now reachable, because the two paints are both
+reachable for the first time.
