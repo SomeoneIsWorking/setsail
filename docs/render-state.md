@@ -1906,3 +1906,51 @@ consecutive *ticks*, not the two paints of one pass, so they show the picture is
 the two paints of a pass differ from each other. The second is condition 4's discriminator and needs a
 capture landing on one tick's two paints. It is now reachable, because the two paints are both
 reachable for the first time.
+
+
+## The rate with two paints per pass: 59.99 and 59.73 a second, and a fifth defect that had to be
+## fixed before that number meant anything
+
+**The reservation from the loader's arena was seven words and the two-paint payloads are eleven.**
+The write path had no bound against the reservation, and the arena is a bump allocator shared with
+every other module, so the stand-in wrote over whatever asked for memory next. In the first measured
+run the paint mod's block was `0x00e05880` (eleven words, `0x5880`-`0x58ac`) and the logic gate's was
+`0x00e0589c` -- **inside it, at the stand-in's seventh word** -- so the gate's counter stub ran in the
+stand-in's second call, and the stand-in's second paint branched to the tick instead of painting.
+
+**The 59.99 a second that run reported was one paint and half a gate, and it is withdrawn as
+evidence.** The paint counter was counting the loop's pass, not two paints. Two duplicated comment
+lines stood above the constant, both claiming it covered every payload; neither was true, and neither
+is the rule now -- `payload()` refuses a payload that does not fit, and the tests enumerate every
+mode and assert it fits, with the reservation itself shown failing 9 checks when put back to seven.
+
+With that fixed the gate's block moved clear, to `0x00e058ac`, and the rate is:
+
+```
+unmodded, 8.00s window:   240 paints = 30.00/s   and 241 = 30.12/s
+mode 13, 8.00s windows:   480 paints = 59.99/s   and 478 = 59.73/s
+```
+
+**The loop's pass sets the rate, and the stand-in adds a paint inside a pass rather than a pass.** The
+pass rate is therefore unchanged -- 240 passes against 241 unmodded -- so the objective's doubling
+risk did not materialise and there is nothing to gate. One window gives 30.00 passes a second, inside
+the 29.9-30.0 band; the other gives 29.87, below it, with another repository's build running on the
+same machine. **Both are reported.**
+
+## The logic is not on the display thread's path, and this is why the gate reads zero
+
+The display thread's loop `FUN_0274c00c` is eleven instructions ending in `b 0x0274c020`: it never
+returns, it is a thread body, and **it has no callers and no callees** -- its one call is `bctrl`
+through the vtable, which is indirect. The frame's six direct callees are:
+
+```
+FUN_0274b054  size  24    FUN_0274b06c  size  24
+thunk_FUN_0274a4e0 size 4  FUN_02760e58 size 60
+FUN_0274c038  size 556    <- the render, 12 read-and-write operands
+OSGetSystemTime@028fdf04 size 1
+```
+
+**The frame reads the system time.** It is time-paced, and the simulation it draws is on another
+thread. So `0x025d42ec` is not executed by the running title -- the host probe counted zero calls at
+it over a window in which the title painted 240 times -- and the gate has no site to stand on in this
+path. **The logic tick rate from the title's own tick is `missing`.**
