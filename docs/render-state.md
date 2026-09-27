@@ -1372,3 +1372,48 @@ consequences:
   them through `+0x24` has been reading a field the frame does not read.
 - **The frame's first instruction clobbers `r0`** with the link register. A stand-in that expects `r0`
   to survive a call into the frame is expecting a register the callee's first instruction overwrites.
+
+## The gdb numbers for the fault do not survive a second run, and the image does not contain the
+## shape the fault was reported with
+
+Two runs of identical code reported the faulting effective address as 1762 and then 1763, the opcode as
+`0x800006e2` and then `0x800306e2`, and the guest program counter as three different values. One
+fixed instruction cannot be all of those, so the `0x6e2` displacement and the `r0 = 0` are read off a
+backtrace frame that had already been unwound. **Both are withdrawn.**
+
+Checked against the image instead, where nothing depends on gdb:
+
+```
+scanned 29,408 functions, matching on the full instruction text
+  0x6e2(r0):  0 instructions in 0 functions
+  0x6e2(  :   2 instructions in 2 functions   -- lbz r0,0x6e2(r31) at 0x021c54e0
+                                                -- lbz r12,0x6e2(r3) at 0x021c5cb8
+  control, 0x3c(:  3,047 instructions in 1,608 functions
+```
+
+**The title's code contains exactly two loads at displacement `0x6e2`, both `lbz`, neither off `r0`.**
+So the fault is not this title's draw path. The fault arrives through `PPCInterpreterSlim_executeInstruction`
+-- the recompiler's *fallback* -- which means **the second pass is running where the recompiler
+declined**, and that is a fact about the patch rather than about the title.
+
+## The running guest's memory is not shown to be the disc image's
+
+With the debugger's guest-memory read repaired, it read guest memory for the first time. The
+addressing is right -- `memory_base` came back `0x7ffed4000000` and every read is that base plus the
+guest address -- and the words found are **not** the words the image has at those addresses:
+
+```
+the frame, guest 0x0274c264:     0x1c966b4a 0xe8ff2194 0x1000c193 0x1400e193 ...
+the vtable slot, guest 0x01004f4c: 0x00000000 0x00000000 0x00000000 0x00000000
+the stand-in block, guest 0x00e05898: 0x01006038 0x9154af49 0xc5699449 ...
+```
+
+The vtable slot reads as zeros where the mod says it wrote the stand-in's address, and the stand-in's
+block reads as words that are not the payload. Three explanations fit and one measurement would
+choose between them, so none is claimed: the code and data are **encrypted on disc and decrypted into
+place**; or the frame is in a **different module** than the one analysed and `0x0274xxxx` is not its
+load address at run time; or the mod reports host-side addresses where the guest wants guest ones.
+
+**Until that is settled, no disassembly-derived claim about the running title is established** --
+including the `display+0x18` correction, which is a correction to the analysed listing. This is the
+first prerequisite for the paint path, and it is now the project's open question.
