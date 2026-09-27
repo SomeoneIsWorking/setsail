@@ -585,6 +585,31 @@ address would have been -- a value the title hands to every shader is a value th
 blend can be handed too -- and it is why the pose at `+0xc4` and the camera's place
 are not obviously the same thing.
 
+**The rest of that chain, read from the running product rather than the file.** The three
+globals the call chain names are zero in the static image -- the loader fills them -- so the
+last link can only be read live, and it was:
+
+```
+value at 0x101f8c14          0x21f0a0d8
+word at 0x21f0a0e8 (= that + 0x10)   0x21f0a15c     the address the registration pass is handed
+```
+
+64 words at `0x21f0a15c`, of which **7 point into MEM1** (`0x101459e0`, `0x10163630`,
+`0x10145c00`, `0x10145c30`, `0x1015e618`, `0x10143aa4`, `0x10163618`), beside `0x00800000`,
+`0x00000038`, `0x00001d30`, `0x00000058`, `0x00000020`, the fragment `arc\0` and the tag
+`0x5874556d`. The word at index 7 is the table's own address, so this is a structure of
+pointers to structures rather than a flat list of uniform addresses.
+
+**A caution, stated because the numbers invite the wrong reading.** `0x10163618` and
+`0x10163630` sit in the same rodata region as the uniform *names* at `0x10163bb4`, and the
+words beside them are a fragment of a filename and a four-character tag. So this structure
+reads more like a graphics or asset context than like a table of uniform value addresses, and
+the chain's `DAT_101f8c14` may be a display context the registration pass is handed rather
+than the uniform table itself. **The view matrix's address is still not known.** What is
+established is the mechanism -- a uniform is bound to a slot index in a per-shader table of
+pointers, and the pointer is handed in by one 360-address function -- and that the addresses
+exist only in a running product, not in the file.
+
 ### The display loop, byte for byte, and what a second paint costs
 
 The display thread's whole entry point is eleven instructions, `0x0274c00c` to `0x0274c034`,
