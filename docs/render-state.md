@@ -1283,3 +1283,36 @@ its block by a *register index*, read from a structure the census does not yet r
 block's bytes are in the slot that index addresses. r3 gives the object, r4 gives the indices, and
 `contextRegister[mmSQ_VTX_UNIFORM_BLOCK_START + index * 7]` word 0 gives the address. No base, no
 offset, and nothing matched host-side.
+
+## The vtable slot the stand-in overwrites is the one the payload reads
+
+Building the objective's own eleven words and running them on the real title: **no fault, and no
+paint** -- 1,854 paints at 68.0s and 1,854 at 97.1s, the gate reading 1,854 calls at the probe and
+nothing in it, and the capture refused with no image reaching its slot in 25 seconds.
+
+The reason is in the payload's second word, and it is not a missing register:
+
+```
+0x10004e88 + 0xcc = 0x10004f54
+```
+
+`0x10004e88` is the vtable the mod reports from the running display, and `0x10004f54` is the slot
+the objective names as the one to rewrite with the stand-in's address. So `lwz r12, 0xcc(r0)` --
+with `r0` holding the vtable, the convention the objective's own `0xcc` displacement implies -- reads
+**the stand-in's own address**, `mtspr CTR` takes it, and `bctrl` calls the stand-in again.
+
+**Condition 1 asks for two things that are the same word**: reach the frame by rewriting vtable slot
+`0xcc`, and re-read the frame from the title's own vtable. A stand-in that reaches the frame through
+that slot calls itself. The signature is distinct from the literal-`bl` family, which faults on a
+guest load at address `0x198`: a self-call that never reaches the frame leaves the paint count
+exactly where it was, which is what the run shows.
+
+**It is resolvable from inside the mechanism, and the resolution is one value.** The mod reads the
+vtable out of the running display on every arming, reads slot `0xcc` to learn what the title was
+going to call, and checks the frame's entry word against the image before installing anything -- so
+it knows `0x0274c264` as the slot's *original* contents. That value, not the rewritten one, is what a
+payload reaching the frame through the vtable needs.
+
+The first word has a second problem: `lwzu r3, 0x24(r30)` presumes `r30` holds the display, and the
+update form leaves `r30` advanced by `0x24`, so the second group reads `display + 0x48` rather than
+where the first read.
