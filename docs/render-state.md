@@ -887,3 +887,68 @@ counter, each still leaving by a branch into the title's own code.
 For the title none of this changes what may be patched: a slot of the vtable the display already
 calls, and the frame function it already points at. The constraint the indirect call and the return
 both impose is the emulator's, not the game's.
+
+
+## Where the pose is not, and what the scan had to be corrected for first
+
+The objective asks for a **node field**. Three places have now been read and three came back
+empty, each with its denominators: 233 whole-block scans of the binder's 64-byte block across
+every 4-aligned offset, 756,350 assembled uniform buffers, and 8 distinct nodes at 4 samples of
+647 words each. The title positions geometry on the CPU each frame, which is why the shipped
+mechanism had to keep vertex bytes and blend them rather than blend a transform -- so the
+transform is one an object carries, and it has to be read.
+
+**The node's own draw cannot be probed where the vtable points.** The vtable at `0x10036300`
+slot `+0xc` holds `0x02160180`, 0x168 bytes *into* `FUN_02160018`, and that address's first
+instruction is a conditional branch (`0x41820010`) -- a probe resumes at "the instruction after
+the entry", so a taken branch there would make the stub re-run the code the branch was there to
+skip, and the emulator refuses such a site outright. The function's own entry is safe
+(`stwu r1,-0x148(r1)`, `0x9421FEB8`) and the node is in `r3` there, and a second table in the
+image at `0x10010648` dispatches through it -- **and it takes zero calls.** The title dispatches
+the draw only through the vtable's target, so the entry is not the path.
+
+**Which leaves the draw's own route to its sub-object**: the draw calls its sub-object at
+`node + 0xa1c`, and the binder probe on that sub-object is already installed and already firing
+137,489 times a run, so the node and the sub-object are both one fixed arithmetic away from a
+binding the title makes hundreds of thousands of times.
+
+**What is there is static.** With one sample per object per frame -- four samples, a frame
+apart -- every rigid transform in both places is `0 moved, delta 0`: node 320, 1340 and 2360,
+and sub-object 792, each in 5 or 6 of 8 objects. Bind poses, rest poses, basis tables: the same
+shape at the same offset in most objects, and the same value for ever. Not a pose.
+
+So the remaining question is one a rigid test cannot ask: is the node's own transform **absent**,
+or **present and carrying scale**? If present, the parent chain is only needed to compose with
+it; if absent, the transform a renderer multiplies -- the world matrix, the node's place in the
+graph multiplied with its parents' -- is on the parent and nowhere else. A second class counts
+any non-singular 3x3 for exactly this, with a floor of 1e-6 on the determinant so a plane of
+near-zero numbers does not read as a matrix.
+
+### Four things the instrument got wrong before it got anything right
+
+The scan produced a **positive** answer twice, and both were the instrument rather than the
+title. They are recorded because each would have been a committed wrong turn.
+
+1. **"Moved" was a bitwise test, not a motion test.** The report said `moved 18` beside `biggest
+   delta 0.000000`: values differing in the last mantissa bit, printed as zero. Three node
+   offsets and one sub-object offset were "held by 6 of 8 objects" on that basis. The bar is
+   now a change over 1e-3 between two draws a frame apart, and an offset is named only if it
+   both crosses the cross-object count *and* has been seen to move.
+2. **The two windows overlapped.** `kSubObjectOffset` is 2588 bytes and the scan window was
+   4096, so a node's window reached into its own sub-object and the sub-object's `+80` was
+   reported in the node's table at `+2668` -- one measurement counted twice, which is the exact
+   thing the two tables exist to prevent. The node's window now ends where the sub-object
+   begins.
+3. **The samples were per binding, not per frame.** An object is bound several times per frame,
+   so all four of its samples could land inside one frame, where no pose has moved. The report
+   gave `0 moved, 18 still, delta 0` -- identical to a genuinely static field, and with no way
+   to say which it was looking at. The schedule is now one sample per object per frame, read
+   from the title's own paint counter, and the report says which schedule ran.
+4. **The scale was subtracted twice.** Row length is stored as a deviation from 1 and the report
+   took one off it again, so a scale of 2.5 came out as 0.5.
+
+And one constant, which is the rule this project already had: the image's word at the draw's
+entry is `0x9421FEB8`, a value derived from the signed decimal the disassembler prints came out
+as `0x9422FEB8`, and the refusal -- `entryHeldOther` -- read exactly like a real finding about
+the game. Every payload word is lifted from the image, never derived, because a derived one is a
+word nobody checked.
