@@ -1235,6 +1235,18 @@ is double buffering measured. The ring never compares across an address change, 
 address, at least two ticks apart: the previous use of that address is still there when the next
 tick binds.
 
+**The scan against the real address is negative too.** `ObjectPoseHistory` now gets the same
+address the ring re-reads; it used to get the record's *size* word, `0x40`, as though it were an
+address, so every reading was 64 bytes of one location. Read where the binder says the block is:
+**236,161 observations, 0 whose block looked like a pose, 0 unreadable, and 233 whole-block scans
+with 0 offset hits.** A real negative, and it retires the third place to look -- consistent with
+the other two, because the title positions geometry on the CPU and hands GX2 vertex bytes, so
+there is no transform left in a uniform block.
+
+**The ring's verdict is 15 to 16 of 16 across runs**, not 16 of 16: one run of identical code
+reported one comparison overwritten, so the bytes do change sometimes and the comparison is not
+trivially always-equal.
+
 **And this is not the block the withdrawn scan read.** Those 233 scans read `object + 0xFC` --
 the record's own word 1 used as an address -- while these addresses sit far from their objects
 (leading offset 0xA7C44, 16 distinct offsets over 8 objects). So "every transform is static" was
