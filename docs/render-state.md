@@ -1815,3 +1815,39 @@ invalidates so nothing written by that file can miss it.
 **The fault persists with the fix in, unchanged.** The stale translation was a real defect and not the
 cause -- and it had to be fixed anyway, because leaving it in place makes every subsequent measurement in
 that area a measurement of the loader's bytes rather than of the paint mod's.
+
+## Correctly paired at last: the fault is in the frame's own code, and the arena pattern was never in
+## guest memory
+
+One run reporting both the counter and the window, which is the only way the two may be paired:
+
+```
+OSSched[core=1]  via recompiled  guest pc=0x0274c27c  lr=0x0274c280  r1=0x0e275a38
+  r0..r7 = 00e05884 0e275a38 10008000 00000000 0e275a24 0e275a28 0e275a30 44213980
+```
+
+**`pc = 0x0274c27c` is the display frame's own seventh word** -- in this title's code, and the first
+time this fault has been located there rather than in the loader's arena. `lr = 0x0274c280` is its
+eighth, so the frame is two words past its probe's resume and is executing normally.
+
+**And the window the debugger dumped in the same run is void.** Every line of it is attributed to a
+symbol *inside the runtime binary* -- `_ZN7glslang16TOutputTraverser10visitUnaryE+2144` -- which is the
+proof that it read host memory and not the guest's. The debugger's `memory_base` has resolved to three
+different values across this session, and on two of them the dump was a host read wearing a guest read's
+clothes; fixing the byte order corrected the order of the words and not the base they came from.
+
+**So the `0x14`-stride pattern quoted from the arena twice was never read out of guest memory at all**,
+and both quotations are withdrawn. The debugger's reader now refuses to print anything when its base is
+zero, unaligned, or inside the runtime's own image, and names the read that can answer it instead: the
+product's own `/memory`, which goes through the fork's accessor and refuses unless every byte of the
+range is mapped guest memory.
+
+**And the register file is identical in every run of this fault, whatever the counter.** `r4`, `r5`, `r6`
+and `r1` are `0x0e275a24`, `0x0e275a28`, `0x0e275a30`, `0x0e275a38` -- four arena words four bytes apart,
+a `0x14`-byte run, the same stride as the pattern that was never in guest memory. A register file holding
+a copy of a pattern is what a guest executing that pattern leaves behind, and one that is byte-identical
+across runs with *different* program counters is not a register file that computed anything.
+
+So the guest is running a repeating `0x14`-stride pattern somewhere in the loader's arena. Where that
+pattern lives has to be read through an accessor that can refuse, and this title's drawing is no longer
+implicated: the frame executes its own code normally two words past the probe's resume.
