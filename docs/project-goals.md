@@ -64,12 +64,27 @@ sampling. Every blended value has explicit provenance.
 **Non-goals.** Changing the game's tick rate. Image-space frame generation. The
 non-goal is about the *rate*, and the mechanism does not touch it: the picture's rate
 comes from the flip and the logic keeps its own. What it does change is named here
-rather than left to be discovered -- one word of a vtable the display thread already
-calls, the title's own record of the interval it asked for, the emulator's flip pacing,
-and, for a title whose logic is slaved to the flip, a gate in the logic path. That last
-one is this project's finding and not an assumption: the gate's shape, its counters and
-what it does to the simulation are title policy and live with the title's other
-evidence, in `docs/render-state.md`.
+rather than left to be discovered, and the list is exhaustive of what a stand-in in
+the display path touches:
+
+- one word of a vtable the display thread already calls, so the display thread paints
+  through the stand-in;
+- **the first word of the display frame itself**, replaced by a relative branch into a
+  stub the runtime allocated, with the title's own instruction preserved inside that
+  stub and executed there before the frame resumes. This is a change to the guest's
+  *code*, not to a pointer to it;
+- **executable memory in the loader's trampoline area**, allocated through the loader's
+  own allocator, which holds the stand-in's payload and the stubs. That area's base is
+  the HLE registry's code, then its symbol names, then zero padding, so a branch that
+  lands in it executes data as code -- which is the fault this project is chasing;
+- the title's own record of the interval it asked for;
+- the emulator's flip pacing;
+- and a gate in the logic path, which is a **backstop and not this project's finding**.
+  The measurement says the logic is *not* slaved to the flip: with the stand-in painting
+  at 59.99 and 60.12 a second the logic read 30.12 in both windows, and the tick runs once
+  per paint in the unmodded title because that is what the title does. The gate exists so
+  that a title which *is* slaved has somewhere to be held, and its shape, its counters
+  and what it does to the simulation are title policy, in `docs/render-state.md`.
 
 **Ownership.** The emulator-side capability — writing into guest code space, reading and
 writing guest words in the guest's own order, invalidating what was compiled over them,
