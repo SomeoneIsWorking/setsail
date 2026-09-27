@@ -1020,3 +1020,37 @@ The sampling limit is stated rather than buried: seven objects of the first eigh
 published, 386,949 refused, and those seven may be seven instances of one kind of thing. "7 of
 7" and "7 of the first 7" are not the same statement, and only one of them is what the number
 says.
+
+
+## The position is per vertex layout, and the layout is in the key
+
+The two-tick falsifier said 2 of 8 nodes blendable and 5 identical, and the split was by
+**stride**: the 5 identical nodes were at stride 32 and compared cleanly -- 585, 975, 1235, 845
+and 4 vertices, zero differing bytes, every magnitude believable -- while the 2 were at strides
+of 20 and 64, with 18 and 60 components out of range.
+
+The cause was in the census's own comparison key, and it is worth stating because it is the
+kind of thing that reads as working. `Signature` recorded a stride and the key **ignored** it, so
+a stride-32 draw and a stride-20 draw whose attribute fields agreed folded into one signature and
+the majority counted both. That is how a single global position came to be reported. The
+attribute the census named sits at offset 0 *of its own layout*, and a title packs positions
+differently per vertex layout -- so one global offset is one layout's answer, and reading the
+others with it produces floats of 10^38.
+
+The stride is in the key now, the position is asked per layout with its own denominator, and the
+report lists **every layout** -- because the number of layouts is exactly what the one global
+answer was hiding.
+
+A separate correction to the same theme: the falsifier was sampling the *first* draw of each
+node each frame, and a node's first draw is a single-vertex placeholder (36 bytes at a stride of
+32). Six of eight objects therefore compared a placeholder against a mesh and reported a "shape
+change" that never happened. Samples are matched by the draw's own shape now, and a node that
+really does change mesh between ticks reports "nothing paired" with the shapes it did sample,
+rather than a verdict about a comparison that never took place.
+
+And a number that looked like evidence: the run reported component deltas of 1.06e+38 and called
+them movement. A position does not move by 10^38 between frames, so there is now a stated
+ceiling, the unreadable components are counted, and a believable movement is separable from
+unreadable bytes -- 40 differing bytes with a largest component delta of **0.488** is a
+half-unit of travel, and it is now reported as such beside the 18 components that were not
+readable.
