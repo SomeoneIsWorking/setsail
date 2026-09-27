@@ -1096,3 +1096,39 @@ as floats. But a *believable* 0.107 on the same twelve bytes is impossible if al
 components were wrong -- so those twelve bytes are partly position and partly not, and a bar over
 how many objects agree on a signature is not enough to tell that. The next bar is a magnitude
 condition rather than a count.
+
+
+## Withdrawn: the believable 0.107 was the census reading a non-position
+
+An earlier entry in this file reported a largest component delta of **0.106766738** on the
+stride-20 layout and called it a tenth of a unit of travel, "which is what a position does", and
+said there was something real. **That was wrong.** Those twelve bytes at offset 0 are not a
+position -- one component in them reads as 3e+38, which is what the out-of-range count had been
+saying all along. A delta of 0.107 beside a delta of 1e+38 in the same twelve bytes was never a
+position.
+
+With the census refusing any position whose components have ever read as something a position is
+not, the layouts are:
+
+    stride 20: 7 objects, positionKnown=false
+    stride 28: 1 object,  positionKnown=false      (one object cannot clear a cross-object bar)
+    stride 32: 7 objects, semantic 1,  12 bytes, offset 12
+    stride 48: 3 objects, semantic 14, 16 bytes, offset 0
+    stride 64: 7 objects, positionKnown=false
+    stride 80: 2 objects, positionKnown=false
+    stride 96: 5 objects, semantic 4,  12 bytes, offset 48
+
+**Seven layouts, the position at a different offset in each.** The stride-32 answer moved from
+`semantic 0, offset 0` to `semantic 1, offset 12`, and stride 64 names nothing at all -- so the
+census was giving a position for two of the four layouts it claimed one for, and only a count of
+agreement had let that through.
+
+The falsifier on the corrected positions: 488,712 draws seen, 403,774 with no position named, 4
+nodes tracked, **0 blendable** against 3 identical. The refusals rose from 188,522 to 403,774
+because most draws are now correctly refused -- their layout has no position this census will
+name. **The vertex-stream blend has no ingredient on these objects, and the one time it appeared
+to have one, the census was reading bytes that are not positions.**
+
+Four of the seven layouts are *unresolved*, which is the honest word: the magnitude bar refuses
+them rather than naming a position and reading rubbish. A layout the census has not solved is a
+different thing from a layout with no position, and the report says which.
