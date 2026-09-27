@@ -1603,3 +1603,47 @@ loader arena, to a probe's dispatch stub. None of the three is the title's paint
 not the paint mod's payload either -- it is the probe machinery installed on the frame. Nothing about
 this title's own drawing is established to be at fault, and nothing about the pose or the uniform-block
 ring is blocked by it.
+
+## The paint probe sat on a word that reads the link register, and the frame returns through it
+
+Read at the fault, with the guest's program counter and link register taken from the CPU state through
+the register the recompiler reserves for it:
+
+```
+OSSched[core=1]  via recompiled  guest pc=0x00e0586c  lr=0x0274c280
+  r0..r7 = 00e05888 0e275a38 10008000 00000000 0e275a24 0e275a28 0e275a30 44213980
+```
+
+**The display frame's first word is `mfspr r0, LR`, and the frame returns through what that instruction
+produced:**
+
+```
+0x0274c264  0x7c0802a6  mfspr  r0, LR       SPR field 8, destination r0
+0x0274c274  0x9001001c  stw    r0,0x1c(r1)  <- the link register, into the frame's own stack slot
+0x0274c278  0x7c7e1b78  or     r30,r3,r3
+0x0274c27c  0x4bffedd9  bl     0x0274b054
+```
+
+A guest probe's stub begins with an **HLE call** and runs the displaced instruction second, and a call
+sets the link register. So probing the frame's first word made the frame save the stub's return address
+instead of its caller's, and **return into the loader's arena** -- which is what the register pair at
+the fault shows.
+
+**Fixed in the mechanism, because the mechanism is what was wrong**: a probe now refuses an entry whose
+displaced instruction reads `LR`, decoded from the opcode and the SPR field rather than matched on two
+full encodings. The paint mod's probe moved to the frame's **sixth** word, `or r30,r3,r3`, which reads
+no special register -- and `r3` is still the display pointer there, because the frame has not touched it
+and its own first act is to copy it into `r30`. So the probe still receives the display in `r3`, which
+is what the objective asks of it.
+
+**And the fault persists, so this was necessary and not sufficient.** With the fix in, the register that
+was wrong is right: `lr = 0x0274c280` is the frame's own seventh word, which is where a frame that
+returned from its sixth word belongs. The guest still reaches the arena -- `pc = 0x00e0586c`, still in
+recompiled code. The probe's `LR` was a real defect and is fixed; something else sends the guest into
+the arena after the frame has returned.
+
+**What this says about the title: nothing new is at fault in it.** Every location this fault has been
+traced to -- the title's draw path, the loader arena's data, a probe's stub, a zero-filled hole the
+payload called -- is code this project wrote, and the last two are now fixed. The remaining cause is in
+what the stand-in does after the frame returns, and the title's own drawing has not been implicated at
+any point.
