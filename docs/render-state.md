@@ -2294,3 +2294,50 @@ assembly is the pose.** Offset 60 is the best of ten that move, and its value is
 normal matrix, a texture matrix and a pass's view projection, and each of those is shaped like a
 transform. The discriminator is the node: the offset whose value is a function of the node and moves
 with the node, and which of the ten every object draw of that node agrees on.
+
+## The eight offsets are one array, and `0x10163bb4` is the name rather than the matrix
+
+**This is the title's own evidence, and it corrects two beliefs at once.**
+
+The census's report now carries the **values** at each held offset, not only the counts, because
+the title names its own camera and a camera should be a comparison rather than an inference. One
+run, gameplay reached, camera moving:
+
+```
+offset 104:  0.19981, 319777, -0.638178, 0.010258,  0.76982,  -364194,  ...
+offset  96: -0.253329, 0.946519, 0.19981, 319777,  -0.638178, 0.010258, ...
+offset  92: 3537.66, -0.253329, 0.946519, 0.19981,  319777,  -0.638178, ...
+offset  76: -194559, -0.955708, -0.212888, -0.203222, 3537.66, -0.253329, ...
+```
+
+**Laying the eight windows over each other, by (offset - lowest) / 4, they are one flat array of
+seventeen words with no contradiction at any shared position:**
+
+```
+-194559  -0.955708  -0.212888  -0.203222  3537.66  -0.253329  0.946519
+0.19981  319777  -0.638178  0.010258  0.76982  -364194  -0.586921  0.64063
+-0.495092  20791.9
+```
+
+A matrix written as a flat run of floats is affine at every 4-byte alignment inside it, so **one
+matrix was being counted as eight candidates**. That is why the reported best offset moved between
+runs -- 60 in one, 104 in the next -- for a reason that had nothing to do with this title.
+
+**And the consequence inverts what the block route assumed.** A pose's offset in an assembly is not a
+constant: the same matrix is at up to twelve offsets depending on the draw that read it. So **no
+fixed offset can be written**, and the offset must be computed per draw. This title's own answer to
+that is its shader's remapped uniform table, whose `mappedIndexOffset` says where each uniform lands
+in the assembled buffer -- the offset is derived from the draw, not searched for.
+
+### `0x10163bb4` is the name, not the matrix
+
+The 48 bytes read back from `cWorldViewMatrix[0]` are not a matrix in either byte order:
+`4.74064e+30, 1.6199e+25, 2.36887e+20, ...` little-endian, and nothing better big-endian. **That
+address holds the string, not the matrix it names.** The name is how the uniform is *looked up*; the
+matrix is wherever the registration writes it, which is what the per-draw uniform table gives.
+
+The earlier reading of that address -- "91 of 96 words non-zero" -- was the name's own bytes. **The
+withdrawal of the "the running guest's memory is not shown to be the disc image's" blocker stands
+and is not affected**: the name coming out of the image's own module, read at the same address in
+the running guest, *is* the identity of the two that was missing. What the address does not give is
+the matrix, and that is a correction rather than a new blocker.
