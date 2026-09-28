@@ -2147,3 +2147,40 @@ shader search, its block-and-occurrence identity, its vertex blending and its re
 deleted.** Those sections are kept because the measurements are measurements, and the measurements
 said where the host was guessing. `wiiuport` ST-OBJECTS carries what survives: the node is the
 identity, the pose is per-object, and no blend is built yet.
+
+## The block address was a physical one, read as a guest one -- and that is why "no word at all"
+
+**A uniform block is registered by the physical offset, and the title's own descriptor record names
+it by the guest address.** `GX2Set*UniformBlock` takes a virtual address; the emulator writes
+`memory_virtualToPhysical` of it into the uniform-block register and reads it back as
+`memory_base + physicalAddr`. Only the physical form was handed to an observer, so:
+
+- `wiiuport`'s `UniformBlockAddress` compared each word of the binder's descriptor record against
+  the draw's *physical* addresses. Two addresses for one block, in two address spaces, compared
+  like with like never hit -- and the route reported **`no word at all`**, with 142,682 exact
+  per-object pairs as the denominator. The measurement was real; the comparison was across address
+  spaces, and no amount of corpus would have fixed it.
+- Every scan for a pose in a block read a range that was never the block's, which is why "no rigid
+  transform in 233 whole-block scans" and "the block holds no unscaled transform" were both
+  statements about the wrong address.
+
+**The fork now hands over both.** The guest address is kept per (stage, slot) as the title sets each
+block, and `UniformAssembly` carries it beside the physical one, with `LatteFrameHooks::PhysicalBytes`
+as the matching reader for the physical form. The address a *record* word is compared against is now
+the guest one, which is the only form that can hit, and `wiiuport`'s test passes a *different*
+number in the physical slot on purpose: a test that passed the same number twice would pass whether
+the comparison was across address spaces or within one.
+
+**What this does not yet say.** The membership test is now able to hit, and the test that says so is
+shown its other answer (5 of 837 checks fail with the comparison broken). It has not been run on the
+title since: the fork change is pinned at `7980661` and the first run against it is the next
+measurement. **So "the record word is the address" is fixed in the code and unmeasured on the
+title**, and every downstream statement that rested on "no word at all" is suspended rather than
+withdrawn -- the arithmetic that produced it was sound and its input was in the wrong address space.
+
+**The position attribute's search had the same shape and is affected the same way.** It looked for
+positions in the vertex stream, which it read at guest addresses, so it is not implicated; what is
+implicated is every claim that named a uniform block's *contents* by an address read from the
+register. The chain the objective names -- node, then its draw record at `+0xa4`, then the uniform
+block -- is now reachable end to end with both address forms in hand, which is what condition 2
+asks for.
