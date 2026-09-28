@@ -2422,3 +2422,49 @@ happens to repeat across neighbours, and **that case is not excluded by this mea
 draw's own shader* puts it at; every offset above is one of this title's own shader hashes. The lookup
 is a per-shader table, the write is twelve words into the assembled buffer, and the game's own draw
 produces the skinning, the attributes and the display list.
+
+## The blend runs on the title, and the game's most-drawn shaders are not in it
+
+Measured on the real title, gameplay reached, camera moving, the stand-in in the mode measured at
+59.99 paints a second. Four runs of `scratch/frame-loop/pose_blend_run.py`, each reported with its
+denominators:
+
+```
+run 1:  POST /pose took 64 of 299   lerped  1,240  (100% of the in-between draws)
+run 2:  POST /pose took 56 of 285   lerped      0  -- withoutShader 29,440 of 29,440
+run 3:  POST /pose took 40 of 295   lerped 17,673  (100%), wordsWritten 212,076
+                                     withoutShader 20,133 of 53,681 -- 63% placeable
+run 4:  POST /pose took 74 of 297   lerped  1,415  (100%), wordsWritten 16,980
+                                     withoutShader 131,918 of 134,786 -- 98% unplaceable
+```
+
+**So the in-between frame is written on this title's own draws** — twelve words per lerp, at every
+in-between draw that could be blended, with the tick's own paint held unwritten beside it (1,404 of
+them in run 4) — **and the coverage is between 2% and 37% depending on the run.**
+
+**And the game's four most-drawn shaders have no candidate at all.** Asked by name through
+`GET /pose?shader=…`, which reports that shader's candidates and the table's own refusal for each:
+
+```
+0x6669a23d03806414:  0 candidates of 300 considered, 41,136 draws
+0x2802e519ac163806:  0 candidates of 300 considered, 23,700 draws
+0x5ae6d5fe34beb432:  0 candidates of 300 considered, 13,055 draws
+0x842a19b509f8b91a:  0 candidates of 300 considered,  6,381 draws
+```
+
+**Not refused — absent.** The census's entry condition is that an assembled buffer must hold twelve
+floats before it is scanned at all, so a uniform buffer shorter than 48 bytes cannot carry a 3x4 and
+is never examined. **This title's most-drawn shaders take their transform from somewhere the uniform
+census does not look**, and the one place left is the vertex attribute stream — the census this
+project already has, which reports `objectsOffered: 0`, `nodesTracked: 0` and `drawsWithoutPosition`
+equal to all 1,388,163 draws. That is a blind instrument reporting zeros.
+
+**The falsifier, and the defect it found.** With the display stand-in **off** the blend wrote nothing
+across 70,152 and 24,819 assemblies in two separate arms. Before the fix it reported writing on
+paints it had been told were the tick's own: the in-between test is the paint counter's parity, and a
+parity is only "half the paints" while the stand-in is doubling them. `installed()` is now the guard,
+asked of the stand-in rather than inferred from a rate.
+
+**What this title still has no answer for:** where the per-object pose lives for the draws that make
+up most of the frame. Everything measured here is real and the arithmetic is right; the coverage is
+not yet the whole picture, and nothing in these runs says it is.
