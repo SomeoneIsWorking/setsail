@@ -2341,3 +2341,41 @@ withdrawal of the "the running guest's memory is not shown to be the disc image'
 and is not affected**: the name coming out of the image's own module, read at the same address in
 the running guest, *is* the identity of the two that was missing. What the address does not give is
 the matrix, and that is a correction rather than a new blocker.
+
+## The camera is twelve words in a flat array, at a per-shader offset
+
+The census now counts a candidate per **shader** rather than per offset, and measures the belief bar
+against each shader's own assemblies rather than against the whole frame. Both were pooling the
+wrong subject. On the real title, gameplay reached, camera moving:
+
+```
+240 of 298 candidates clear the bar          (1 before, on a whole-frame denominator)
+162 distinct shaders, 40 distinct moving offsets
+
+shader 0x1557c18f92f3bcb9  offset  12   moved 21730/21879   0.00103093, 0.694118, 1, 1, ...
+shader 0x1557c18f92f3bcb9  offset  60   moved 21708/21857   0, -0.638178, 0.010258, 0.76982, -364194
+shader 0x8cecd19741c6c1c7  offset   4   moved   202/21950   0.005, 2455, 0.00103093, 0.694118, 1, 1
+shader 0x8cecd19741c6c1c7  offset  84   moved    80/21864   0.64063, -0.495092, 20791.9, -0.498249
+shader 0xb7252004aba21c10  offset  76   moved    98/235     0, 0.443678, 0.768473, 0.461084
+```
+
+**The same matrix is in two shaders, one word apart.** Laying the windows over each other by
+(offset - lowest) / 4, offsets 4 and 12 agree at four of six printed words with the second starting
+two words after the first: one array, two shaders' layouts. And offset 60's words are indices 5..10
+of the seventeen-word array already recorded above, with offset 84 continuing it at 13..18.
+
+**So the answer, for this title's camera:** twelve consecutive words in a flat run of floats in the
+assembled uniforms, and where that run lands is a property of the shader that read it -- **offset 12
+in shader `0x1557c18f92f3bcb9`** (21,730 movements of 21,879 comparisons) and **offset 4 in shader
+`0x8cecd19741c6c1c7`** (202 of 21,950). The other three offsets are the same array at other
+alignments, or matrices that never moved.
+
+**A blend does not have to search for that.** For a draw the pose is at the offset *that draw's own
+shader* puts it at, and both offsets are this title's own shader hashes. The lookup is a per-shader
+table, the write is twelve words into the assembled buffer, and the game's own draw produces the
+skinning, the attributes and the display list.
+
+**And the per-shader denominator was keyed on the base hash alone**, so shaders differing only in
+their aux hash were summed: **45,475 assemblies attributed to one "shader" that is three**. A
+denominator three times too large is a bar nothing clears honestly, and it is why the count above
+was 1 before this change and 240 after.
