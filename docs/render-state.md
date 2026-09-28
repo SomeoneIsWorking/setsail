@@ -579,8 +579,9 @@ block is the wrong place. The next read is the same shape test applied to guest 
 node's own draw, `FUN_02160018` with the node in `r3`, scan the node for a rigid 3x4 at every
 4-aligned offset, with the same counted bar. Lerping *that* field and letting the game's own
 draw run is what regenerates the skinning, the attributes and the display list at the lerped
-pose — with no host-side vertex work at all, which is why `VertexBlend` guessing which vertex
-buffers belonged to one object is a consequence of not knowing this and not a preference.
+pose — with no host-side vertex work at all, which is why the retired mechanism's vertex blend
+guessing which vertex buffers belonged to one object was a consequence of not knowing this and
+not a preference.
 The original dump:
 Dumped from the title while it ran, one slot against the other, 256 bytes each:
 
@@ -980,7 +981,8 @@ to 81, which are projection constants and coordinates rather than transforms. Th
 consistent with how the game works and with why the mechanism being retired existed: the title
 positions geometry **on the CPU each frame** and hands GX2 a display list of
 already-transformed vertices, so the pose has already been consumed into vertex bytes by the
-time anything could read a field. `VertexBlend` existed to paper over exactly that.
+time anything could read a field. The retired mechanism's vertex blend existed to paper over
+exactly that.
 
 That makes the blend's landing place the **vertex stream at the game's own draw**, not a field
 to lerp, and the fork already has both halves of it: the uniform assembly's data is writable at
@@ -1162,7 +1164,7 @@ corrected against its own false positives:
    The question is open again.
 2. **The title consumes the pose into vertex bytes**, which is why: it positions geometry on the
    CPU each frame and hands GX2 a display list of already-transformed vertices. That is also why
-   the mechanism being retired needed `VertexBlend`.
+   the retired mechanism needed to blend vertex bytes at all.
 3. **The position attribute cannot be found by the title's own attribute tables**, in any of
    eight layouts, because the candidate offsets are not positions for a substantial minority of
    vertices.
@@ -2069,3 +2071,79 @@ a 2,588-byte window the loose class finds a 3x4 at offset 100 in 7 of 8 objects,
 comparisons. A static prop's own transform not moving while the camera moves is what a static prop
 does. **So the chain is: the node is the identity, the draw assembles the uniforms, and the pose is
 offset 60 of that assembly -- which is the chain the objective named, with each link measured.**
+
+## The pose is per-object, not a view matrix, and that is what redirects the next read
+
+The offset-60 finding says *where in an assembly* a value that moves like a pose lives. It does not
+say *whose* pose it is, and the difference decides where the blend is written: a view matrix is one
+global the host could lerp once, while a per-object pose has to be found per draw.
+
+`title::ObjectPoseLocator` asks that directly. For every new object identity it takes the twelve
+words at the best offset and, for each of fifteen other objects present in the same frame, asks
+whether that other object's words at the same offset are the same. The result, with the camera
+moving, over 1,035,056 assemblies:
+
+```
+offset  60:  6 of 15 other objects read the same,  9 read a different value
+offset 104:  8 of 15 read the same                   (the most shared offset measured)
+no offset was shared by all 15
+```
+
+**A view matrix would read 15 of 15.** It would be the same twelve words for every draw in the frame,
+because there is one camera. No offset was. So the pose the offset-60 scan found is a *per-object*
+value, which is what the objective's chain says it should be -- the node, then its draw, then the
+assembly -- and the locator now compares each new identity's exact twelve words against the last
+value it saw, rather than trusting the offset alone.
+
+### The view matrix is in none of the three places it was looked for in
+
+Having established that the per-draw pose is not the view, the view still has to be found, because a
+60 Hz presentation needs the camera in it. Three candidate regions were scanned, each twice or three
+times over, with `TransformShape::isAffine` asked in both readings and a move required to report:
+
+```
+the per-draw assembled uniforms   every stage, every object      0 moved (the pose is per-object)
+module .data and .bss             768,055 windows / 3,072,264 bytes
+                                  23,210 in the affine class, 0 moved, 3 rounds
+0x15800000                        2,097,141 windows / 8,388,608 bytes
+                                  0 in the affine class at all, 3 rounds
+```
+
+`title::GlobalPoseCensus` takes two snapshots of a named range a frame apart and reports what
+changed, refusing a scan whose readers refuse -- an instrument that cannot be pointed at a range and
+asked a question is an instrument that only ever answers one question. The collapse matters: a value
+repeated across a sliding window is one pose, not several, so the report counts poses rather than
+matches.
+
+### The title names it, and the name is in the data area those scans covered
+
+**`cWorldViewMatrix[0]` is at `0x10163bb4` and `cWorldViewProjectionMatrix[0]` at `0x10163d00`.**
+Read from the running guest through `GET /memory` -- 91 of 96 and 78 of 96 words non-zero -- and
+computed from the ELF independently as `0x10000000 + (0xa5c3f4 - 0x8f8840)`, which agrees to the
+byte. The names are a flat NUL-terminated table in the module's data area, followed by
+`uBlurOffset`, `uOneMinusNearDivFar` and `cToyCam_Saturation1`.
+
+So the camera was never hidden. It was sitting in a flat name table that no instrument was reading,
+while the host was measuring which 3x4 moved like a camera. **That withdraws the long-standing
+blocker "The running guest's memory is not shown to be the disc image's" (above) in the direction
+it pointed:** the names come out of the image's own module and the running guest reads at the same
+addresses, which is the identity of the two that was missing.
+
+### What the next read is, and what it is not
+
+The view matrix is a global, so it is in none of the three regions above -- which is the answer, not
+the obstacle. The remaining place a per-draw pose could be written is **through the registration,
+by `FUN_02786520` across 21,488 addresses**, and that is unmeasured.
+
+What the next read is: **a range, not a search.** `LatteFrameHooks::UniformAssembly` already carries
+the guest block addresses each draw sourced. Those were withdrawn as an *identity* -- a block address
+names a ring slot, not an object -- and they were never withdrawn as a *pointer*. The data-area scan
+should scan the block the draw actually sourced, which is a bounded range named by the title's own
+arithmetic, rather than the module's whole `.data`, which is a guess about where the title keeps
+things.
+
+**The mechanism this document's earlier sections describe -- the host-side statistical lerp, its
+shader search, its block-and-occurrence identity, its vertex blending and its recorded replay -- is
+deleted.** Those sections are kept because the measurements are measurements, and the measurements
+said where the host was guessing. `wiiuport` ST-OBJECTS carries what survives: the node is the
+identity, the pose is per-object, and no blend is built yet.
