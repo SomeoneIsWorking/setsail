@@ -2237,7 +2237,7 @@ writes from the object, and the chain the objective names is this title's own.
 | what | state |
 |---|---|
 | the block's guest address, per node | **measured** -- handed over beside the physical one; the record's word 1 or 2 names it |
-| the pose's offset within the block | **being measured** by the range scan; the block is 768 bytes, which holds a 3x4 twelve times over |
+| the pose's offset within the block | **measured: there is none.** The block does not hold it — see below |
 | tick N-1's words present when tick N paints | **measured, 16 of 16**, 8 consecutive pairs on different addresses |
 | the place the in-between frame goes | **the paint path has it** -- the stand-in runs the frame body twice, and the second call is where the lerped block belongs |
 
@@ -2253,3 +2253,44 @@ writes from the object, and the chain the objective names is this title's own.
 - **A failure is one object at N for one frame, counted by reason** -- not a crash, and not a silent
   skip. The retired mechanism's skips and their reasons were the pattern; the numbers are why it
   needed them.
+
+### Measured: the block does not hold the pose, and that is a better answer than a guess
+
+The range scan, on the real title, gameplay reached, the camera moving, the three most-used written
+blocks of each round:
+
+```
+negative control, the module's .data and .bss, 0x1018c0c0 + 3072264:
+  768055 windows, 23210 in the affine class, 0 moved, 0 poses
+written address 0: 0x3e638c00, seen 27253 times (32.2%)
+  181 windows over 768 bytes, 23 in the affine class, 0 moved, 0 poses
+written address 1: 0x3e638b00, seen 26750 times (31.6%)
+  181 windows over 768 bytes, 14 in the affine class, 0 moved, 0 poses
+written address 2: 0x453f0f00, seen 2297 times (2.7%)
+  181 windows over 768 bytes,  0 in the affine class, 0 moved, 0 poses
+```
+
+Two rounds, identical numbers to the window, so this is a steady state and not a sample of a
+transient. **The block does not hold a transform that moves**: 181 twelve-word windows over 768
+bytes, 23 of them shaped like a transform, and not one of them changed between two readings a frame
+apart. The negative control moved nothing either.
+
+**So the pose was never in this title's uniform block.** It is in the **assembled** uniform buffer --
+the runtime's own copy, built from the block and the ALU constant registers, and handed over at
+`UniformAssembly::data`, which is writable at the last point before upload. That is where the
+per-object census found it at offset 60, with ten offsets moving and 60 the best in every run.
+
+**And that is the better landing place.** It is per draw, and the draw is this title's own; it is
+writable at exactly one moment; it already carries the node's identity, because this title's binder
+says which object is being drawn; and **it needs no write to this title's memory at all**, so
+nothing has to be put back afterwards. The host holds the twelve words each node's draw assembled at
+N-1 and at N, and on the in-between frame the assembly hook writes the lerp into that draw's own
+buffer -- after which every skinning pass, attribute fetch and display list is this title's own code
+at the lerped pose.
+
+**What is left is one measurement, and it is this title's own question: which twelve words of the
+assembly is the pose.** Offset 60 is the best of ten that move, and its value is per-object -- 6 of
+15 other objects read the same, so it is not a view matrix. But an assembly holds a model matrix, a
+normal matrix, a texture matrix and a pass's view projection, and each of those is shaped like a
+transform. The discriminator is the node: the offset whose value is a function of the node and moves
+with the node, and which of the ten every object draw of that node agrees on.
