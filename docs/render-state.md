@@ -2379,3 +2379,46 @@ skinning, the attributes and the display list.
 their aux hash were summed: **45,475 assemblies attributed to one "shader" that is three**. A
 denominator three times too large is a bar nothing clears honestly, and it is why the count above
 was 1 before this change and 240 after.
+
+## The per-object pose, with the addresses -- and what the discriminator cannot say
+
+The census's `otherIdentitiesSameValue` separates a per-object value from a shared one, and with the
+table keyed per shader the numbers separate cleanly on this title:
+
+```
+shader 0x8cecd19741c6c1c7  offset  4    0 of 15 other objects read the same value   202/21950 moved
+shader 0x1557c18f92f3bcb9  offset 12    0 of 15                                     21730/21879 moved
+shader 0x1557c18f92f3bcb9  offset 60    3 of 15                                     21708/21857 moved
+shader 0x8cecd19741c6c1c7  offset 84    8 of 15                                        80/21864 moved
+shader 0xb7252004aba21c10  offset 76   12 of 15                                         98/235 moved
+```
+
+**A camera's view matrix reads 15 of 15. These read 0 of 15** -- every object at that offset holds its
+own twelve words -- and two different shaders hold *the same* twelve words, at offsets 4 and 12.
+**That is this title's per-object pose: twelve words at offset 12 in shader `0x1557c18f92f3bcb9`**
+(21,730 movements of 21,879 comparisons, in every one of that shader's assemblies) and at **offset 4 in
+shader `0x8cecd19741c6c1c7`**. The offset-76 entry, 12 of 15, is a pass's value rather than an
+object's.
+
+**The discriminator's limit, stated rather than glossed.** It compares an offset's value against the
+same offset in the **immediately preceding assembly**, not against the same object's earlier value.
+So "0 of 15" is exactly *consecutive objects read different twelve words at this offset* -- the
+per-object signature -- and it is not a per-object *temporal* test. The two agree for a value that
+belongs to one object: a prop standing still reads the same words every time and its neighbour reads
+different ones. They disagree for a value this title recomputes per object per tick in a way that
+happens to repeat across neighbours, and **that case is not excluded by this measurement.**
+
+**So the chain, with every link measured:**
+
+| what | where, and how it is known |
+|---|---|
+| the identity | the **node**, from the binder at `0x027ff88c` / `0x027ff9c0`: 195,581 bindings over 590 objects |
+| where the pose is **not** | the node's own 2,588-byte window -- 0 of 23,210 transform-shaped windows there move; the sourced uniform block -- 23, 14 and 0 in the class across the three most-used blocks, 0 moving |
+| where the pose is | **twelve words in the assembled uniforms**, at an offset that is a property of the shader that read it |
+| the camera | the same twelve words, shared by 15 of 15 objects, at offset 76 in shader `0xb7252004aba21c10` |
+| both ends of the lerp | tick N-1's block is still present when tick N paints, **16 of 16**, 8 consecutive pairs on different addresses |
+
+**And a blend does not have to search for any of it.** For a draw, the pose is at the offset *that
+draw's own shader* puts it at; every offset above is one of this title's own shader hashes. The lookup
+is a per-shader table, the write is twelve words into the assembled buffer, and the game's own draw
+produces the skinning, the attributes and the display list.
