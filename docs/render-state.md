@@ -2215,3 +2215,41 @@ implicated is every claim that named a uniform block's *contents* by an address 
 register. The chain the objective names -- node, then its draw record at `+0xa4`, then the uniform
 block -- is now reachable end to end with both address forms in hand, which is what condition 2
 asks for.
+
+## The blend, from this title's side: write the block, at the title's own draw
+
+The mechanism follows from what is now measured, and it is not the one that was deleted.
+
+Between tick N-1 and tick N the host lerps the twelve words of the pose **in the uniform block the
+draw sources**, the second paint reads the lerped block, and the tick's own frame reads the block
+this title wrote for it. Every draw, skinning pass, attribute fetch and display list is then produced
+by the game's own code at the lerped pose, because the game's own draw is what reads the block.
+Identity is the node, so the write is per node and the twelve words are that node's.
+
+**Why this and not the assembly site.** The retired mechanism wrote into the host's *assembled*
+uniform buffer and re-issued a recorded draw stream, which is why it had to match identity by block
+address and occurrence index, plan partners, and shadow every render target. Writing the block needs
+none of that: this title already says which block belongs to which object, in a record its binder
+writes from the object, and the chain the objective names is this title's own.
+
+**The four things it needs, and where each stands.**
+
+| what | state |
+|---|---|
+| the block's guest address, per node | **measured** -- handed over beside the physical one; the record's word 1 or 2 names it |
+| the pose's offset within the block | **being measured** by the range scan; the block is 768 bytes, which holds a 3x4 twelve times over |
+| tick N-1's words present when tick N paints | **measured, 16 of 16**, 8 consecutive pairs on different addresses |
+| the place the in-between frame goes | **the paint path has it** -- the stand-in runs the frame body twice, and the second call is where the lerped block belongs |
+
+**What is not free, said plainly.**
+
+- **The block has to be put back.** A lerped block that stays lerped is the next tick's problem.
+  Twelve words per object, saved and restored around the second paint -- and that is *not* the
+  guest-state guard that was deleted, which shadowed every texture subresource the runtime wrote
+  because a replay re-issued the whole frame.
+- **This title hands blocks out of a pool.** A block one object owned at N-1 may be another's at N.
+  The write is keyed on the node, whose record names the block for that node, and the case to
+  measure is a node whose block changed between the two ticks.
+- **A failure is one object at N for one frame, counted by reason** -- not a crash, and not a silent
+  skip. The retired mechanism's skips and their reasons were the pattern; the numbers are why it
+  needed them.
