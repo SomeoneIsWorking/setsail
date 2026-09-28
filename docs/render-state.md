@@ -2171,12 +2171,43 @@ the guest one, which is the only form that can hit, and `wiiuport`'s test passes
 number in the physical slot on purpose: a test that passed the same number twice would pass whether
 the comparison was across address spaces or within one.
 
-**What this does not yet say.** The membership test is now able to hit, and the test that says so is
-shown its other answer (5 of 837 checks fail with the comparison broken). It has not been run on the
-title since: the fork change is pinned at `7980661` and the first run against it is the next
-measurement. **So "the record word is the address" is fixed in the code and unmeasured on the
-title**, and every downstream statement that rested on "no word at all" is suspended rather than
-withdrawn -- the arithmetic that produced it was sound and its input was in the wrong address space.
+### Measured on the title: it fires, and it cannot yet name the word
+
+One driven run, gameplay reached, camera moving, `GET /blocks`:
+
+```
+bindings 1106045, records held 2553, evicted 0
+assemblies 1685585, of which with a record 1552183 (92.1%)
+addresses 4456584, distinct 4028, refused 0
+slots the guest wrote 1121588, distinct written addresses 3409
+expected size 768; the leading written guest address 0x47eee100, seen 390161 times
+wordHits: word 1 (offset 4)  229631 hits, share 0.1479
+          word 2 (offset 8)  229631 hits, share 0.1479
+          no other word hit at all
+addressWord: null, refused "severalWordsReadSoNoneIsDistinguished"
+```
+
+**From no word at all to 229,631 hits.** The comparison was the fault.
+
+Three things are still true of the answer, and none is a fault in the code:
+
+1. **The record repeats the address.** A sampled record reads
+   `[0x3e634210, 0x3e634300, 0x3e634300, 0x40, 0x40, 50397184, 269917568]` -- words 1 and 2 hold
+   the same value, and words 3 and 4 are both the size. Two words tie to the hit because the record
+   holds the same number twice, so a value comparison cannot separate them and the route refuses to
+   name one rather than coin-tossing with a number attached.
+2. **14.8% is a share, not a hit rate.** A record is held per object and compared against every draw
+   naming that object, while a draw usually sources a block some *other* object bound. What it says
+   is how often the block a draw sources is the one this object bound.
+3. **The block is 768 bytes, not 64.** `expectedSize: 768` is the record's own size word, and 768
+   bytes holds a 3x4 with room over. This settles the arithmetic this document once repeated the
+   wrong way round -- "a 64-byte block cannot hold twelve floats" -- twice now: twelve floats are 48
+   bytes, 48 <= 64, and 64 is exactly one 4x4.
+
+**So the write location is a range, and the title names it**: `0x47eee100` to `0x47eee400` for the
+leading written block, `0x47ef6c00` for the leading address overall. The next measurement is a scan
+of those ranges for a transform-shaped twelve-word window that moves between two frames a frame
+apart -- a range, not a search, and not a guess about where the title keeps things.
 
 **The position attribute's search had the same shape and is affected the same way.** It looked for
 positions in the vertex stream, which it read at guest addresses, so it is not implicated; what is
