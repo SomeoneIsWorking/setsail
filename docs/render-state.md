@@ -797,6 +797,26 @@ without a flip. That field's value in the steady state is not read yet, and neit
 `display+0x28`. Both are readable at run time from the display pointer, which a probe on
 `0x0274c264` already receives in `r3` on every paint.
 
+## Where a model's matrices are not, and where they are uploaded
+
+On the GameCube a `J3DModel` holds its draw matrices double-buffered (`mpDrawMtxBuf[2]` at `+0x94`,
+indexed by `mCurrentViewNo` at `+0xb0`, exchanged each frame by `swapDrawMtx`), which would leave
+the previous tick's pose beside this one's. HD's code does not show that swap: across the J3D
+range (`0x027c0000`..`0x02830000`, 40,612 memory-operand instructions) one function reads `+0xb0`
+near both `+0x94` and `+0x98` of one register, and that one reads them from the stack. Across the
+whole executable (2,358,115 instructions) no window loads a pointer pair and its index from one
+object and exchanges them through two indexed loads and stores. So either HD's model object is laid
+out differently or its draw matrices are not double-buffered; not known which.
+
+The title uploads uniforms through 111 call sites of `GX2SetVertexUniformBlock` (`0x028fada4`)
+and 198 of `GX2SetVertexUniformReg` (`0x028fadac`) (`scratch/re/call_sites.py`, which also
+finds the one `GX2SwapScanBuffers` call Ghidra names, `0x0274c98c`). J3D's own 17 are one helper
+shape, e.g. `0x027f1a30` and `0x027ff7fc`: it binds one buffer to the pixel, vertex and geometry
+stages together, at the locations the shader names (halfwords `+8`, `+10`, `+12`), taking the
+buffer from a table of 28-byte entries indexed by the word at `+76` (size at `+20`, pointer at
+`+28`). That is plumbing; which function writes a model's matrices into such a buffer, and from
+which object, is the next thing to observe on the running title.
+
 ## Limits of what has been measured
 
 **The camera finding rests on four consecutive frames** captured at frame 300 of an
