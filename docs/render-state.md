@@ -817,6 +817,17 @@ buffer from a table of 28-byte entries indexed by the word at `+76` (size at `+2
 `+28`). That is plumbing; which function writes a model's matrices into such a buffer, and from
 which object, is the next thing to observe on the running title.
 
+**Next step, not yet run** (stopped 2026-09-29 before it ran): a caller census on the seven J3D
+functions holding those binds, entry and first instruction each, in wiiuport's
+`WIIUPORT_CALLER_CENSUS` form: `027f16e8:9421ff38,027f1fa8:9421ff48,027fe118:9421ffe0,
+027ff75c:7c0802a6,027ff88c:7c0802a6,027ff9c0:7c0802a6,027ffb48:7c0802a6` (entries found by
+walking back from the call sites to the frame's `stwu`/`mflr`, so a wrong one reports
+`entryHeldOther` rather than installing). Boot a headless session with it, walk, read
+`GET /callers`: the call sites that reach each bind are the draw code that fills the buffers, and
+their arguments name the object whose pose it is. Then read that object with `GET /memory` on two
+consecutive ticks to see whether the previous tick's pose is kept anywhere. One attempt failed only
+because another session's `verify.py` was relinking the runtime binary as it launched.
+
 ## Limits of what has been measured
 
 **The camera finding rests on four consecutive frames** captured at frame 300 of an
