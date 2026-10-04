@@ -880,8 +880,12 @@ that is a statement about the *shader*: `LatteBufferCache_collectUniformBlockSou
 shader's own `list_remappedUniformEntries_bufferGroups`, so a shader that names no uniform block returns
 none however many it binds. Its uniforms come from the **ALU constant bank**, which
 `uniformData_updateUniformVars` copies into the assembled buffer from `mmSQ_ALU_CONSTANT0_0 + 0x400`
-for a vertex shader and `+ 0` for a pixel one. **So for the largest share of the frame the pose is
-already inside the buffer the blend writes.**
+for a vertex shader and `+ 0` for a pixel one. **So for the largest share of the frame those uniforms
+are already inside the buffer the blend writes -- and feeding the census's own candidates back proved
+that sentence wrong**: `POST /pose` took 71 of 386 offered and refused 210 as a pass's value (the same
+twelve words as twelve or more of fifteen other objects) and 116 as a value that never moved, so the
+272 bytes hold a camera and a projection, shared or static, and **there is no per-object pose in
+them.**
 
 **And the gate that refused it was refusing a field its own identity function does not use.** The
 census's `identityOf` takes the node the binder published and falls back to block sources only when
@@ -911,12 +915,15 @@ rather than a sample looks like.
 of uniforms cannot be applying a 3x4 from them whatever it binds, so those draws are already positioned
 when they are issued. A blend that leaves them alone is right, not incomplete.
 
-**What is left for the frame's largest share is the vertex bytes -- now a conclusion rather than an
-assertion.** The answer recorded above, "the vertex attribute stream", rested on the short-buffer claim
-that was half wrong. The census can now look at those shaders: what it finds in their uniforms is mostly
-globals, and in the 64-byte one nothing in the affine class at all. The instrument that would say more
-is the vertex-attribute census, and it is blind (`nodesTracked: 0`, every draw reported without a
-position), so that is the next read and this document does not claim to know its answer.
+**What is left for the frame's largest share is the vertex bytes -- now measured twice over rather than
+asserted once.** The answer recorded above, "the vertex attribute stream", rested on the short-buffer
+claim that was half wrong; the constant-bank claim that replaced it was wrong too, and the feed is what
+said so. The census can look at those shaders and what it finds in their uniforms is a camera and a
+projection -- shared by nearly every object, or static -- and in the 64-byte one nothing in the affine
+class at all. **So the frame's largest share has no per-object pose in its uniforms, by measurement
+rather than by inference.** The instrument that would say more is the vertex-attribute census, and it is
+blind (`nodesTracked: 0`, every draw reported without a position), so that is the next read and this
+document does not claim to know its answer.
 
 ## Limits of what has been measured
 
