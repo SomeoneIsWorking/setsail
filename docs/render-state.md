@@ -817,16 +817,106 @@ buffer from a table of 28-byte entries indexed by the word at `+76` (size at `+2
 `+28`). That is plumbing; which function writes a model's matrices into such a buffer, and from
 which object, is the next thing to observe on the running title.
 
-**Next step, not yet run** (stopped 2026-09-29 before it ran): a caller census on the seven J3D
-functions holding those binds, entry and first instruction each, in wiiuport's
-`WIIUPORT_CALLER_CENSUS` form: `027f16e8:9421ff38,027f1fa8:9421ff48,027fe118:9421ffe0,
-027ff75c:7c0802a6,027ff88c:7c0802a6,027ff9c0:7c0802a6,027ffb48:7c0802a6` (entries found by
-walking back from the call sites to the frame's `stwu`/`mflr`, so a wrong one reports
-`entryHeldOther` rather than installing). Boot a headless session with it, walk, read
-`GET /callers`: the call sites that reach each bind are the draw code that fills the buffers, and
-their arguments name the object whose pose it is. Then read that object with `GET /memory` on two
-consecutive ticks to see whether the previous tick's pose is kept anywhere. One attempt failed only
-because another session's `verify.py` was relinking the runtime binary as it launched.
+**The recorded census, run: seven of its entries could never have installed, and the four shaders it
+was chasing are two different things.** (Run 2026-10-04, the real disc, gameplay reached and walked.)
+
+`0x027ff88c` and `0x027ff9c0` are not wrong addresses -- each entry's first word matches the image
+(`mfspr r0,LR`, `0x7c0802a6`, `scratch/j3d-census/entry_words.py` over `plain.elf`). **They are the
+two binder entries the standing per-object block census already holds**, and a registration that holds
+an entry refuses every other one for it for the rest of the run with `entryHeldOther`; there is no way
+to take it back. So the recorded string could only ever have installed five. It was rerun with eight
+entries that no standing probe holds, all eight verified against the image first (**8 of 8 match**):
+
+```
+0x027f16e8 installed  141084 calls   0x027f112c x125400, 0x027f11d8 x15600, 0x025e88d8 x84
+0x027fe118 installed   13104 calls   0x025ec340 x11232,  0x0257ec98 x1248,   0x0246e38c x624
+0x027ffb48 installed   13104 calls   0x025ec518 x11232,  and six more at 312 each
+0x0282d098 installed    5702 calls   0x0282daa0 x5702
+0x027f1fa8 installed       0 calls   0x027ff75c 0, 0x027cc78c 0, 0x027d3960 0
+```
+
+**And the census is checked against the static answer it was built to replace.** `0x027fe118` has ten
+direct `bl` call sites in the image, in seven functions; the three the run saw are exactly three of
+them (`0x0246e388`, `0x0257ebd8`, `0x0257ec94`, `0x025ec33c` -> returns `0x0246e38c`, `0x0257ec98`,
+`0x025ec340`), and the four the title did not draw from are absent rather than counted zero. The
+instrument reproduces static analysis where both can see it, which is the only reason to believe it
+where only it can.
+
+**What the census adds: twenty functions hold the binds, and seventeen of them are reached only through
+a pointer.** Across `0x027c0000..0x02830000` the three `GX2Set*UniformBlock` setters are called 84 times
+from 20 functions (`scratch/j3d-census/bind_functions.py`); a whole-image `bl` scan finds direct callers
+for 3 of the 20 (`scratch/re/call_sites.py`). That is the reason a runtime census is the right
+instrument and not a convenience.
+
+**And the descriptor shape is two shapes, which the single one recorded above is not.** The binder's
+sub-object reads its entry list at `object + 0x10 + *(u32 *)(object + 0x4c) * 0x1c` and takes the
+address at `+0x04` and the size at `+0x0c` -- instructions `0x027ff8a8`, `0x027fe148`, `0x027fe15c`,
+`0x027fe170`, `0x027fe180` -- which is exactly the trio of constants the binder census measures.
+**`0x027f16e8` reads a different one**: its entry is `base + cursor * 0x1c` with the list at `+0`, not
+`+0x10`, and it takes the size at `+0x14` and the address at `+0x1c` (`0x027f19c4`, `0x027f19cc`,
+`0x027f19d4`, `0x027f19d8`, `0x027f19e0`). So "a table of 28-byte entries indexed by the word at +76,
+size at +20 and pointer at +28" is one of two layouts, and the census follows only the first.
+
+**One call binds three blocks.** `0x027fe118` issues nine setter calls in three stage-triples from
+three 28-byte lists on the same sub-object: `+0x10` indexed by the word at `+0x4c`, `+0x1c` indexed by
+`+0x58`, and `+0xc4` indexed by `+0x100` (`0x027fe148`, `0x027fe1ec`, `0x027fe290`), each read at `+0x04`
+for the address and `+0x0c` for the size. `0x027f16e8` issues fifteen, five stage-triples. **So "the block the draw sourced"
+is at most one of the blocks the draw bound**, and the census names the one the binder used.
+
+**And the premise the four shaders rested on was half wrong, and the gate that refused them was not
+needed.** The claim was that their assembled buffers are under 48 bytes and so were never examined.
+Asked per shader -- which the report could not do until now -- they are two different things:
+
+```
+0x6669a23d03806414   60361 assemblies   0 too short   60361 WITHOUT SOURCES   272 bytes   can hold a pose
+0x5ae6d5fe34beb432   12080 assemblies   0 too short   12080 WITHOUT SOURCES    64 bytes   can hold a pose
+0x2802e519ac163806   40727 assemblies 40727 too short        0 without sources   32 bytes   cannot
+0x842a19b509f8b91a    5625 assemblies  5625 too short        0 without sources   16 bytes   cannot
+```
+
+**The most-drawn shader in the game carries 272 bytes of uniforms -- five 3x4s' worth -- and the census
+refused every one of its 60,361 assemblies at a different gate.** `assembly.blockSources` is empty, and
+that is a statement about the *shader*: `LatteBufferCache_collectUniformBlockSources` walks the
+shader's own `list_remappedUniformEntries_bufferGroups`, so a shader that names no uniform block returns
+none however many it binds. Its uniforms come from the **ALU constant bank**, which
+`uniformData_updateUniformVars` copies into the assembled buffer from `mmSQ_ALU_CONSTANT0_0 + 0x400`
+for a vertex shader and `+ 0` for a pixel one. **So for the largest share of the frame the pose is
+already inside the buffer the blend writes.**
+
+**And the gate that refused it was refusing a field its own identity function does not use.** The
+census's `identityOf` takes the node the binder published and falls back to block sources only when
+there is no node, so an assembly with no blocks *and* a node is as pairable as one with both. Narrowed
+to refuse only what cannot be paired -- no node **and** no block source -- and re-run on the rebuilt
+runtime, same disc, gameplay reached and walked:
+
+```
+0x6669a23d03806414  84274 assemblies   0 too short    87 unidentified   84187 scanned, all without a block
+                    8 candidates of 596, where it had 0 of 414 before
+                      offset 0: moved 2 of 2 comparisons, 1 of 15 other objects the same   per-object
+                      offsets 4 and 52:                                       1 of 15       per-object
+                      offsets 32, 132, 216, 156, 152:                        8 to 14 of 15  shared
+0x5ae6d5fe34beb432  12282 assemblies   0 too short   210 unidentified   12072 scanned: 0 candidates
+0x2802e519ac163806  58622 assemblies 58622 too short        --                                  32 bytes
+0x842a19b509f8b91a   5595 assemblies  5595 too short        --                                  16 bytes
+```
+
+**So those 272 bytes hold eight windows: five shared by 8 to 14 of 16 objects -- globals, a camera or a
+projection -- and three per-object** (offsets 0, 4 and 52), with movement counted over **two**
+comparisons, which is this project's standing small-denominator caveat and is stated beside the number
+rather than divided away. A second run of the narrowed gate moved the counts and not the shape
+(84,274 assemblies and 8 candidates of 596, then 60,749 and 8 of 545), which is what a measurement
+rather than a sample looks like.
+
+**And the two that really are too small cannot be helped at all.** A shader that declares 32 or 16 bytes
+of uniforms cannot be applying a 3x4 from them whatever it binds, so those draws are already positioned
+when they are issued. A blend that leaves them alone is right, not incomplete.
+
+**What is left for the frame's largest share is the vertex bytes -- now a conclusion rather than an
+assertion.** The answer recorded above, "the vertex attribute stream", rested on the short-buffer claim
+that was half wrong. The census can now look at those shaders: what it finds in their uniforms is mostly
+globals, and in the 64-byte one nothing in the affine class at all. The instrument that would say more
+is the vertex-attribute census, and it is blind (`nodesTracked: 0`, every draw reported without a
+position), so that is the next read and this document does not claim to know its answer.
 
 ## Limits of what has been measured
 
