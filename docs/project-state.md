@@ -9,7 +9,10 @@ twice, and nothing moves at 60 Hz yet. On 2026-10-08 the node identity every ear
 measurement rested on was found wrong (a single slot read on the Latte thread after later binds) and
 replaced by joining each draw to its binder through the command stream; retaken with it, the uniform
 "per-object pose" candidates are shared across objects, so the pose is not in the assembled uniforms.
-The next step is the vertex-stream history, which positions no draw yet. State and evidence are in
+RE of the uniform uploads then showed why: the model renderer's only moving constant is the view, static
+geometry is in world space, and moving models are CPU-transformed into vertex positions. The view is now
+blended at the register file on the in-between paint; the next step is pairing the moving models'
+position buffers across ticks. State and evidence are in
 `wiiuport` ST-OBJECTS and `docs/frame-interpolation.md` ("Draw identity").
 
 **The host-side statistical lerp is deleted, not deferred.** It identified the camera by
