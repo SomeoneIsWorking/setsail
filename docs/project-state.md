@@ -3,19 +3,14 @@
 Factual capability inventory for Wind Waker HD on Linux. Epic intent is in
 `docs/project-goals.md`. Every item is `verified`, `partial`, `blocked`, or `missing`.
 
-**Current focus.** ST-PAINT is now `verified` -- the guest paint path paints twice a tick at
-59.99 a second with the logic held at 30.00, measured on the real disc through the control channel
-in adjacent windows, and the player's disc image is never touched. What is left is the blend:
-the title's own frame is painted twice, so the picture rate is doubled and the motion is not. The
-pose and the identity are located -- the node is the identity, tick N-1's uniform block is still
-present when tick N paints in 16 of 16 comparisons, and the pose is per-object rather than global,
-measured over 1,035,056 assemblies -- and where the blend is written is not: the view matrix is
-excluded from the per-draw uniforms, from the module's `.data`/`.bss` and from `0x15800000`, and
-the fourth candidate, written through the registration by `FUN_02786520` across 21,488 addresses,
-is the next read. That read is a *range*, taken from the guest block addresses each draw sourced,
-not a search. All the state and evidence is in `wiiuport` ST-GUESTPAINT and ST-OBJECTS; the
-title's own evidence is in this project's `docs/render-state.md` and the mechanism is in
-`wiiuport` `docs/frame-interpolation.md`.
+**Current focus.** ST-PAINT is `verified` -- the guest paint path paints twice a tick at 59.99 a
+second with the logic held at 30.00 -- so what is left is the blend: the title's own frame is painted
+twice, and nothing moves at 60 Hz yet. On 2026-10-08 the node identity every earlier per-object
+measurement rested on was found wrong (a single slot read on the Latte thread after later binds) and
+replaced by joining each draw to its binder through the command stream; retaken with it, the uniform
+"per-object pose" candidates are shared across objects, so the pose is not in the assembled uniforms.
+The next step is the vertex-stream history, which positions no draw yet. State and evidence are in
+`wiiuport` ST-OBJECTS and `docs/frame-interpolation.md` ("Draw identity").
 
 **The host-side statistical lerp is deleted, not deferred.** It identified the camera by
 searching shaders for a 3x4 that moved like one, matched each draw's identity across ticks by
