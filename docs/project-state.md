@@ -4,16 +4,16 @@ Factual capability inventory for Wind Waker HD on Linux. Epic intent is in
 `docs/project-goals.md`. Every item is `verified`, `partial`, `blocked`, or `missing`.
 
 **Current focus.** ST-PAINT is `verified` -- the guest paint path paints twice a tick at 59.99 a
-second with the logic held at 30.00 -- so what is left is the blend: the title's own frame is painted
-twice, and nothing moves at 60 Hz yet. On 2026-10-08 the node identity every earlier per-object
+second with the logic held at 30.00 -- so what is left is the blend. On 2026-10-08 the node identity every earlier per-object
 measurement rested on was found wrong (a single slot read on the Latte thread after later binds) and
 replaced by joining each draw to its binder through the command stream; retaken with it, the uniform
 "per-object pose" candidates are shared across objects, so the pose is not in the assembled uniforms.
 RE of the uniform uploads then showed why: the model renderer's only moving constant is the view, static
-geometry is in world space, and moving models are CPU-transformed into vertex positions. The view is now
-blended at the register file on the in-between paint; the next step is pairing the moving models'
-position buffers across ticks. State and evidence are in
-`wiiuport` ST-OBJECTS and `docs/frame-interpolation.md` ("Draw identity").
+geometry is in world space, and moving models are CPU-transformed into vertex positions. The view is
+blended at the register file on the in-between paint, and the CPU-written quads (particles, sea waves,
+sky clouds) at the draw on the first paint of each tick. Next: look at a player run in mode 13 with
+the gate on. State and evidence are in `wiiuport` ST-OBJECTS and `docs/frame-interpolation.md`
+("Where the pose is").
 
 **The host-side statistical lerp is deleted, not deferred.** It identified the camera by
 searching shaders for a 3x4 that moved like one, matched each draw's identity across ticks by
