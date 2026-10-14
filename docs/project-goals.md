@@ -119,3 +119,30 @@ user-configuration API.
 
 **Constraints.** The package is asset-free. Environment variables and command-line paths
 remain maintainer overrides, never player prerequisites.
+
+## GOAL-PAD — Played with an Xbox-layout controller on one screen
+
+**Outcome.** The game plays start to finish on a desktop gamepad and the TV picture alone, and
+every button it shows is the button the player presses, drawn as an Xbox-layout glyph.
+
+**Why.** The player holds an Xbox-layout pad, not a GamePad. A prompt that says "A" for the right
+face button sends them to the wrong button, and a feature that lives on the GamePad's screen is
+missing.
+
+**Success conditions.**
+- Glyphs follow position, as the bindings do (`wiiuport` `docs/controllers.md`): the right face
+  button shows B, bottom A, top Y, left X; L/R show LB/RB, ZL/ZR LT/RT, the sticks LS/RS, +/−
+  Menu/View. Colours are Xbox's: A green, B red, X blue, Y yellow.
+- Covered: the message font's picture glyphs (`CKingPic.bffnt`), the HUD's lettered panes
+  (`CommandA`, `CommandGuide`, `IconSlideArea` and the rest that bind `ABXY`, `R`, `ZR`) and the
+  textures with a letter drawn in (`LStick_00`, `RStick_00`), in every language pack on the disc.
+- Built on the player's machine from the player's own disc files and our own glyph art; the
+  disc is never written.
+- Nothing the game offers needs the GamePad: map, items, Tingle Tuner, picto box and Miiverse
+  bottles either work on the TV with a Pro Controller or are listed as a measured gap.
+
+**Constraints.** The glyph art is ours, drawn by code in this project; no community mod's
+assets are vendored or derived from (their licenses are NC-ND, `docs/prior-art.md`). No game
+file enters the repository or the package.
+
+**Non-goals.** PlayStation or Nintendo glyph sets. Re-laying the HUD out for a different pad.
