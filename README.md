@@ -18,3 +18,5 @@ The runtime comes from [`wiiuport`](../wiiuport), a fork of
 
 **You supply the game.** setsail ships no game files, keys, or anything derived from
 them. It asks for your own Wind Waker HD disc image on first run.
+
+Built with AI assistance (Claude and other LLMs).
